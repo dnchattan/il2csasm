@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29911.84
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "examples", "src\examples\examples.csproj", "{2D17C9FE-C673-497C-9F38-F6AA45442D8E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Runtime", "src\Runtime\Runtime.csproj", "{36FD9FC8-798E-47D3-9138-0792A3EA9BDF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core", "src\Core\Core.csproj", "{838893A3-6BE6-456B-812A-0518995A1C77}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2D17C9FE-C673-497C-9F38-F6AA45442D8E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D17C9FE-C673-497C-9F38-F6AA45442D8E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D17C9FE-C673-497C-9F38-F6AA45442D8E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D17C9FE-C673-497C-9F38-F6AA45442D8E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36FD9FC8-798E-47D3-9138-0792A3EA9BDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36FD9FC8-798E-47D3-9138-0792A3EA9BDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36FD9FC8-798E-47D3-9138-0792A3EA9BDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36FD9FC8-798E-47D3-9138-0792A3EA9BDF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{838893A3-6BE6-456B-812A-0518995A1C77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{838893A3-6BE6-456B-812A-0518995A1C77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{838893A3-6BE6-456B-812A-0518995A1C77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{838893A3-6BE6-456B-812A-0518995A1C77}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9A6777DD-3E0A-4B8C-8409-63618928EAC9}
+	EndGlobalSection
+EndGlobal
