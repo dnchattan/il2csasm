@@ -1,6 +1,6 @@
-﻿using il2cs.Assembly;
+﻿using IL2CS.Core;
 
-namespace Runtime
+namespace IL2CS.Runtime
 {
 	[Size(4376)]
 	public class ClassDefinition : StructBase

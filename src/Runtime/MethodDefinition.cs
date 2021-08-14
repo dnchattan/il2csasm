@@ -1,11 +1,6 @@
-﻿using il2cs.Assembly;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using IL2CS.Core;
 
-namespace Runtime
+namespace IL2CS.Runtime
 {
 	[Size(8)]
 	public class MethodDefinition : StructBase
