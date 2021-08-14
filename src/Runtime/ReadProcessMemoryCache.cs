@@ -7,17 +7,17 @@ namespace IL2CS.Runtime
 	internal class MemoryCacheEntry
 	{
 		private readonly ReadOnlyMemory<byte> Data;
-		private readonly ulong Address;
-		private readonly ulong Size; // in bytes
+		private readonly long Address;
+		private readonly long Size; // in bytes
 
-		public MemoryCacheEntry(ulong address, ulong size, byte[] data)
+		public MemoryCacheEntry(long address, long size, byte[] data)
 		{
 			Data = new ReadOnlyMemory<byte>(data);
 			Address = address;
 			Size = size;
 		}
 
-		public bool Contains(ulong address, ulong size)
+		public bool Contains(long address, long size)
 		{
 			if (address >= Address + Size)
 			{
@@ -34,7 +34,7 @@ namespace IL2CS.Runtime
 			return true;
 		}
 
-		public ReadOnlyMemory<byte> ReadRange(ulong address, ulong size)
+		public ReadOnlyMemory<byte> ReadRange(long address, long size)
 		{
 			if (!Contains(address, size))
 			{
@@ -45,21 +45,21 @@ namespace IL2CS.Runtime
 	}
 	internal class ReadProcessMemoryCache
 	{
-		private SortedDictionary<ulong, WeakReference<MemoryCacheEntry>> cache = new();
+		private SortedDictionary<long, WeakReference<MemoryCacheEntry>> cache = new();
 
-		public MemoryCacheEntry Store(ulong address, byte[] data)
+		public MemoryCacheEntry Store(long address, byte[] data)
 		{
-			MemoryCacheEntry entry = new(address, (ulong)data.Length, data);
+			MemoryCacheEntry entry = new(address, data.Length, data);
 			cache.Add(address, new(entry));
 			return entry;
 		}
 
-		public ReadOnlyMemory<byte>? Find(ulong address, ulong size)
+		public ReadOnlyMemory<byte>? Find(long address, long size)
 		{
-			var allValues = cache.Values.Select(value => value.TryGetTarget(out MemoryCacheEntry target) ? target : null).ToArray();
-			MemoryCacheEntry entry = allValues.FirstOrDefault(entry => entry != null && entry.Contains(address, size));
-			
+			MemoryCacheEntry entry = FindEntry(address, size);
+
 			// rebuild if anything expired
+			MemoryCacheEntry[] allValues = cache.Values.Select(value => value.TryGetTarget(out MemoryCacheEntry target) ? target : null).ToArray();
 			if (allValues.Any(value => value == null))
 			{
 				RebuildCache();
@@ -71,12 +71,25 @@ namespace IL2CS.Runtime
 			return entry.ReadRange(address, size);
 		}
 
+		public MemoryCacheEntry FindEntry(long address, long size)
+		{
+			MemoryCacheEntry[] allValues = cache.Values.Select(value => value.TryGetTarget(out MemoryCacheEntry target) ? target : null).ToArray();
+			MemoryCacheEntry entry = allValues.FirstOrDefault(entry => entry != null && entry.Contains(address, size));
+
+			// rebuild if anything expired
+			if (allValues.Any(value => value == null))
+			{
+				RebuildCache();
+			}
+			return entry;
+		}
+
 		private void RebuildCache()
 		{
-			SortedDictionary<ulong, WeakReference<MemoryCacheEntry>> newCache = new();
-			foreach (var kvp in cache)
+			SortedDictionary<long, WeakReference<MemoryCacheEntry>> newCache = new();
+			foreach (KeyValuePair<long, WeakReference<MemoryCacheEntry>> kvp in cache)
 			{
-				if (kvp.Value.TryGetTarget(out var value))
+				if (kvp.Value.TryGetTarget(out MemoryCacheEntry value))
 				{
 					newCache.Add(kvp.Key, kvp.Value);
 				}

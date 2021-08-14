@@ -10,5 +10,9 @@ namespace IL2CS.Runtime
 
 		[Offset(24)]
 		public string Namespace;
+
+		[Offset(184)]
+		[Indirection(2)]
+		public UnknownClass StaticFields;
 	}
 }

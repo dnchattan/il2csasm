@@ -18,10 +18,10 @@ namespace IL2CS.Core
 	[AttributeUsage(AttributeTargets.Field, Inherited = true, AllowMultiple = false)]
 	public class OffsetAttribute : Attribute
 	{
-		public IntPtr OffsetBytes { get; private set; }
+		public int OffsetBytes { get; private set; }
 		public OffsetAttribute(int offset)
 		{
-			OffsetBytes = (IntPtr)offset;
+			OffsetBytes = offset;
 		}
 	}
 
@@ -38,10 +38,12 @@ namespace IL2CS.Core
 	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Field, Inherited = true, AllowMultiple = false)]
 	public class AddressAttribute : Attribute
 	{
-		public IntPtr Address { get; private set; }
-		public AddressAttribute(int address)
+		public long Address { get; private set; }
+		public string RelativeToModule { get; private set; }
+		public AddressAttribute(long address, string relativeToModule)
 		{
-			Address = (IntPtr)address;
+			Address = address;
+			RelativeToModule = relativeToModule;
 		}
 	}
 

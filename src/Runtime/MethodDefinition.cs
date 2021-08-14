@@ -2,9 +2,11 @@
 
 namespace IL2CS.Runtime
 {
-	[Size(8)]
+	[Size(80)]
 	public class MethodDefinition : StructBase
 	{
-
+		[Offset(24)]
+		[Indirection(2)]
+		public ClassDefinition klass;
 	}
 }

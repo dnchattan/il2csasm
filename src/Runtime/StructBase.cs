@@ -9,17 +9,24 @@ namespace IL2CS.Runtime
 	public abstract class StructBase
 	{
 		public Il2CsRuntimeContext Context { get; set; }
-		public IntPtr Address { get; set; }
+		public long Address { get; set; }
 		public bool Static { get; set; }
-		private byte[] Buffer { get; set; }
+		private MemoryCacheEntry Cache { get; set; }
 
-		public void Load(Il2CsRuntimeContext context, IntPtr address)
+		public void Load(Il2CsRuntimeContext context, long address)
 		{
 			Context = context;
 			Address = address;
 			Static = GetType().GetCustomAttribute<StaticAttribute>(inherit: true) != null;
-			ReadBuffer();
+			EnsureCache();
 			ReadFields();
+		}
+
+		public T As<T>() where T : StructBase,new()
+		{
+			T cast = new();
+			cast.Load(Context, Address);
+			return cast;
 		}
 
 		private void ReadFields()
@@ -34,16 +41,34 @@ namespace IL2CS.Runtime
 
 		private void ReadField(FieldInfo field)
 		{
-			IntPtr offset = GetFieldAddress(field);
+			long offset = GetFieldAddress(field);
 			byte indirection = 1;
 			IndirectionAttribute indirectionAttr = field.GetCustomAttribute<IndirectionAttribute>(inherit: true);
 			if (indirectionAttr != null)
 			{
 				indirection = indirectionAttr.Indirection;
 			}
+			for (; indirection > 1; --indirection)
+			{
+				offset = Context.ReadPointer(offset);
+			}
+			if (field.FieldType.IsAssignableTo(typeof(StructBase)))
+			{
+				StructBase result = (StructBase)Activator.CreateInstance(field.FieldType);
+				result.Load(Context, offset);
+				field.SetValue(this, result);
+			}
+			else if (field.FieldType.IsPrimitive)
+			{
+				if (field.FieldType.Name == "Int64")
+				{
+					var memory = Context.ReadMemory(offset, 8);
+					field.SetValue(this, BitConverter.ToInt64(memory.Span));
+				}
+			}
 		}
 
-		private IntPtr GetFieldAddress(FieldInfo field)
+		private long GetFieldAddress(FieldInfo field)
 		{
 			if (Static)
 			{
@@ -52,7 +77,12 @@ namespace IL2CS.Runtime
 				{
 					throw new ApplicationException($"Field {field.Name} requires an AddressAttribute");
 				}
-				return addressAttr.Address;
+				long address = addressAttr.Address;
+				if (!string.IsNullOrEmpty(addressAttr.RelativeToModule))
+				{
+					address = address + Context.GetModuleAddress(addressAttr.RelativeToModule);
+				}
+				return address;
 			}
 			else
 			{
@@ -61,28 +91,33 @@ namespace IL2CS.Runtime
 				{
 					throw new ApplicationException($"Field {field.Name} requires an OffsetAttribute");
 				}
-				return IntPtr.Add(Address, offsetAttr.OffsetBytes.ToInt32());
+				return Address + offsetAttr.OffsetBytes;
 			}
 		}
 
-		private void ReadBuffer()
+		private void EnsureCache()
 		{
+			if (Cache != null)
+			{
+				return;
+			}
 			SizeAttribute sizeAttr = GetType().GetCustomAttribute<SizeAttribute>(inherit: true);
 			if (sizeAttr == null)
 			{
 				return;
 			}
 			IntPtr handle = NativeWrapper.OpenProcess(ProcessAccessFlags.Read, inheritHandle: true, Context.TargetProcess.Id);
-			Buffer = new byte[sizeAttr.Size];
-			if (!NativeWrapper.ReadProcessMemoryArray(handle, Address, Buffer))
+			byte[] buffer = new byte[sizeAttr.Size];
+			if (!NativeWrapper.ReadProcessMemoryArray(handle, (IntPtr)Address, buffer))
 			{
 				throw new ApplicationException("Failed to read memory location");
 			}
+			Cache = Context.CacheMemory(Address, sizeAttr.Size);
 		}
 
-		public T GetStaticFields<T>() where T : StructBase, new()
-		{
-			return Context.ReadStruct<T>(Address + 184);
-		}
+	}
+
+	public abstract class StaticStructBase : StructBase
+	{
 	}
 }
