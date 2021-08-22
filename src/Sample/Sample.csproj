@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -7,13 +7,18 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\Generator.Cli\Generator.Cli.csproj" />
     <ProjectReference Include="..\Runtime\Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Reference Include="Raid">
-      <HintPath>..\Generator.Cli\bin\Debug\net5.0\Raid.dll</HintPath>
+      <HintPath>Raid.dll</HintPath>
     </Reference>
   </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Unity.Plarium.Common.dll,Unity.RaidApp.dll,Unity.Model.dll,Unity.App.dll,Unity.Plarium.Common.dll -o $(ProjectDir)Raid.dll" />
+  </Target>
 
 </Project>

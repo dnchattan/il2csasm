@@ -51,6 +51,14 @@ namespace IL2CS.Runtime
 			for (; indirection > 1; --indirection)
 			{
 				offset = Context.ReadPointer(offset);
+				if (offset == 0)
+				{
+					return;
+				}
+			}
+			if (offset == 0)
+			{
+				return;
 			}
 			if (field.FieldType.IsAssignableTo(typeof(StructBase)))
 			{

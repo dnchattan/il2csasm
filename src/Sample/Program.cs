@@ -1,8 +1,8 @@
-﻿using IL2CS.Core;
-using IL2CS.Runtime;
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Linq;
+using IL2CS.Core;
+using IL2CS.Runtime;
 
 namespace examples
 {
@@ -11,9 +11,10 @@ namespace examples
 		private static void Main(string[] args)
 		{
 			Process raidProc = GetRaidProcess();
-			Il2CsRuntimeContext runtime = new Il2CsRuntimeContext(raidProc);
-			AppModelStaticFields statics = runtime.ReadStruct<AppModel.Statics>().GetInstance.klass.StaticFields.As<AppModelStaticFields>();
-			AppModel appModel = statics.Instance;
+			Il2CsRuntimeContext runtime = new(raidProc);
+			AppModelStaticFields statics = runtime.ReadStruct<AppModelStatics>().GetInstance.klass.StaticFields.As<AppModelStaticFields>();
+			Client.Model.AppModel appModel = statics.Instance;
+			
 			Console.WriteLine(appModel.UserId); // avoid compile error by dumping this out
 		}
 		private static Process GetRaidProcess()
@@ -32,20 +33,14 @@ namespace examples
 	{
 		[Offset(8)]
 		[Indirection(2)]
-		public AppModel Instance;
+		public Client.Model.AppModel Instance;
 	}
 
-	[Size(512 + 8)]
-	public class AppModel : StructBase
+	[Static]
+	public class AppModelStatics : StaticStructBase
 	{
-		[Static]
-		public class Statics : StaticStructBase
-		{
 			[Address(58242656, "GameAssembly.dll")]
 			[Indirection(2)]
 			public MethodDefinition GetInstance;
-		}
-		[Offset(352)]
-		public long UserId;
 	}
 }

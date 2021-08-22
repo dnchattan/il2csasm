@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Il2CppDumper;
 
 namespace IL2CS.Generator
 {
-    public class Il2CppIndex
+	public class Il2CppIndex
     {
         private Il2CppExecutor2 executor;
         private Metadata metadata;
@@ -19,22 +18,6 @@ namespace IL2CS.Generator
 
         public readonly Dictionary<string, List<StructStaticMethodInfo>> TypeNameToStaticMethods = new Dictionary<string, List<StructStaticMethodInfo>>();
         public List<Il2CppTypeDefinitionInfo> TypeInfoList = new List<Il2CppTypeDefinitionInfo>();
-
-        private class UniqueName
-        {
-            private HashSet<string> uniqueNamesHash = new HashSet<string>(StringComparer.Ordinal);
-
-            public string Get(string name)
-            {
-                string uniqueName = name;
-                int i = 1;
-                while (!uniqueNamesHash.Add(uniqueName))
-                {
-                    uniqueName = $"{name}_{i++}";
-                }
-                return uniqueName;
-            }
-        }
 
         private class TypeDefinitionMetadata
         {

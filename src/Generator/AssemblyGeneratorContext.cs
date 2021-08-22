@@ -19,7 +19,7 @@ namespace IL2CS.Generator
 			byte[] metadataBytes = File.ReadAllBytes(options.MetadataPath);
 			Metadata = new Metadata(new MemoryStream(metadataBytes));
 
-			byte[] il2cppBytes = File.ReadAllBytes(options.DllPath);
+			byte[] il2cppBytes = File.ReadAllBytes(options.GameAssemblyPath);
 			uint il2cppMagic = BitConverter.ToUInt32(il2cppBytes, 0);
 			MemoryStream il2CppMemory = new(il2cppBytes);
 
@@ -45,7 +45,7 @@ namespace IL2CS.Generator
 				{
 					if (!flag && Il2Cpp is PE)
 					{
-						Il2Cpp = PELoader.Load(options.DllPath);
+						Il2Cpp = PELoader.Load(options.GameAssemblyPath);
 						Il2Cpp.SetProperties(Metadata.Version, Metadata.maxMetadataUsages);
 						flag = Il2Cpp.PlusSearch(Metadata.methodDefs.Count(x => x.methodIndex >= 0), Metadata.typeDefs.Length, Metadata.imageDefs.Length);
 					}

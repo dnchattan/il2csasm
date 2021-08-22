@@ -4,7 +4,7 @@
 	{
 		public string AssembyName;
 
-		public string DllPath;
+		public string GameAssemblyPath;
 		public string MetadataPath;
 
 		public string[] IncludeImages;
