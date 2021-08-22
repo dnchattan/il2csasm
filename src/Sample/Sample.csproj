@@ -10,4 +10,10 @@
     <ProjectReference Include="..\Runtime\Runtime.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="Raid">
+      <HintPath>..\Generator.Cli\bin\Debug\net5.0\Raid.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>
