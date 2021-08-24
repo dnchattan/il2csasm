@@ -33,8 +33,10 @@ namespace IL2CS.Generator.Cli
 			Parser.Default.ParseArguments<Options>(args)
 			.WithParsed(o =>
 			{
-				AssemblyGenerator asm = new AssemblyGenerator(new AssemblyGeneratorOptions
+				using LoggingScope scope = new();
+				AssemblyGenerator2 asm = new(new AssemblyGeneratorOptions
 				{
+					LogFactory = scope.Factory,
 					AssembyName = o.AssemblyName,
 					GameAssemblyPath = o.GameAssemblyPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\GameAssembly.dll",
 					MetadataPath = o.MetadataPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\Raid_Data\il2cpp_data\Metadata\global-metadata.dat",

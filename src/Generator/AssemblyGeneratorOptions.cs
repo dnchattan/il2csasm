@@ -1,4 +1,6 @@
-﻿namespace IL2CS.Generator
+﻿using Microsoft.Extensions.Logging;
+
+namespace IL2CS.Generator
 {
 	public class AssemblyGeneratorOptions
 	{
@@ -8,5 +10,7 @@
 		public string MetadataPath;
 
 		public string[] IncludeImages;
+
+		public ILoggerFactory LogFactory;
 	}
 }

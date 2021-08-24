@@ -613,11 +613,16 @@ namespace Il2CppDumper
 			}
 			else
 			{
-				if (il2CppType.data.klassIndex >= metadata.typeDefs.Length)
+				if (il2CppType.type == Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST)
 				{
-					return null;
+					Il2CppGenericClass genericClass = il2Cpp.MapVATR<Il2CppGenericClass>(il2CppType.data.generic_class);
+					return GetGenericClassTypeDefinition(genericClass);
 				}
-				return metadata.typeDefs[il2CppType.data.klassIndex];
+				if (il2CppType.data.klassIndex < metadata.typeDefs.Length)
+				{
+					return metadata.typeDefs[il2CppType.data.klassIndex];
+				}
+				return null;
 			}
 		}
 

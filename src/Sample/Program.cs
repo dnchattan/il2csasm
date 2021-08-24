@@ -13,9 +13,9 @@ namespace examples
 			Process raidProc = GetRaidProcess();
 			Il2CsRuntimeContext runtime = new(raidProc);
 			AppModelStaticFields statics = runtime.ReadStruct<AppModelStatics>().GetInstance.klass.StaticFields.As<AppModelStaticFields>();
-			Client.Model.AppModel appModel = statics.Instance;
+			//Client.Model.AppModel appModel = statics.Instance;
 			
-			Console.WriteLine(appModel.UserId); // avoid compile error by dumping this out
+			//Console.WriteLine(appModel.UserId); // avoid compile error by dumping this out
 		}
 		private static Process GetRaidProcess()
 		{
@@ -31,9 +31,9 @@ namespace examples
 	[Size(16)]
 	public class AppModelStaticFields : StructBase
 	{
-		[Offset(8)]
-		[Indirection(2)]
-		public Client.Model.AppModel Instance;
+		//[Offset(8)]
+		//[Indirection(2)]
+		//public Client.Model.AppModel Instance;
 	}
 
 	[Static]

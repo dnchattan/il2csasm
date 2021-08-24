@@ -63,11 +63,10 @@ namespace IL2CS.Generator
 				}
 				if (typeDef.Type.DeclaringType != null)
 				{
-					TypeBuilder declaringType = GetType(typeDef.Type.TypeIndex) as TypeBuilder;
+					TypeBuilder declaringType = GetType(typeDef.Type.DeclaringType.TypeIndex) as TypeBuilder;
 					if (declaringType != null)
 					{
 						TypeBuilder nestedBuilder = CreateType(typeDef.Type, declaringType: declaringType);
-						m_typesToBuild.Add(nestedBuilder);
 						types.Add(nestedBuilder, typeDef);
 					}
 					continue;
@@ -122,7 +121,6 @@ namespace IL2CS.Generator
 				
 				TypeBuilder typeBuilder = CreateType(typeInfo);
 				m_types.Add(il2cppTypeIndex, typeBuilder);
-				m_typesToBuild.Add(typeBuilder);
 			}
 			return m_types[il2cppTypeIndex];
 		}
@@ -130,6 +128,7 @@ namespace IL2CS.Generator
 		private void BuildType(TypeBuilder typeBuilder, Il2CppTypeDefinitionInfo typeDef)
 		{
 			TypeBuilder staticsBuilder = null;
+			GenericTypeParameterBuilder[] genericParameters = Array.Empty<GenericTypeParameterBuilder>();
 			void EnsureNestedStaticType()
 			{
 				if (staticsBuilder != null)
@@ -138,12 +137,28 @@ namespace IL2CS.Generator
 				}
 				staticsBuilder = CreateType(typeDef.Type, declaringType: typeBuilder, isStatic: true);
 			}
+			Type GetFieldType(Il2CppTypeInfo fieldType)
+			{
+				if (genericParameters != null) {
+					var templateIndex = typeDef.Type.TemplateArgumentNames.IndexOf(fieldType.TypeName);
+					if (templateIndex >-1)
+					{
+						return genericParameters[templateIndex];
+					}
+				}
+				return GetType(fieldType.TypeIndex);
+			}
+
+			if (typeDef.Type.TemplateArgumentNames.Count > 0)
+			{
+				genericParameters = typeBuilder.DefineGenericParameters(typeDef.Type.TemplateArgumentNames.ToArray());
+			}
 
 			UniqueName nameSet = new();
 			//typeBuilder.DefineDefaultConstructor(MethodAttributes.Public | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName);
 			foreach (Il2CppFieldInfo field in typeDef.Fields)
 			{
-				FieldBuilder fieldBuilder = typeBuilder.DefineField(nameSet.Get(FieldName(field)), GetType(field.Type.TypeIndex), FieldAttributes.Public);
+				FieldBuilder fieldBuilder = typeBuilder.DefineField(nameSet.Get(FieldName(field)), GetFieldType(field.Type), FieldAttributes.Public);
 				fieldBuilder.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new Type[] { typeof(int) }), new object[] { field.Offset }));
 				if (field.Type.Indirection > 1)
 				{
@@ -195,7 +210,7 @@ namespace IL2CS.Generator
 			}
 			else
 			{
-				tb = m_module.DefineType(FullyQualifiedNameFor(typeDef), TypeAttributes.Public | TypeAttributes.Class, typeof(StructBase));
+				tb = m_module.DefineType(FullyQualifiedNameFor(typeDef), typeAttrs | TypeAttributes.Public, typeof(StructBase));
 			}
 			m_typesToBuild.Add(tb);
 			return tb;

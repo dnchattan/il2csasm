@@ -11,11 +11,14 @@ namespace IL2CS.Generator
 		public readonly Il2Cpp Il2Cpp;
 		public readonly Il2CppExecutor2 Executor;
 		public readonly Metadata Metadata;
+		public readonly AssemblyGeneratorOptions Options;
 
 		private const uint IL2CPPMAGIC_PE = 0x905A4D;
 
 		public AssemblyGeneratorContext(AssemblyGeneratorOptions options)
 		{
+			Options = options;
+
 			byte[] metadataBytes = File.ReadAllBytes(options.MetadataPath);
 			Metadata = new Metadata(new MemoryStream(metadataBytes));
 
