@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // Use IntelliSense to find out which attributes exist for C# debugging
+            // Use hover for the description of the existing attributes
+            // For further information visit https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md
+            "name": ".NET Core Launch (console)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            // If you have changed target frameworks, make sure to update the program path.
+            "program": "${workspaceFolder}/src/Generator.Cli/bin/Debug/net5.0/IL2CS.Generator.Cli.dll",
+            "args": [
+                "-v",
+                "-n",
+                "RaidTest",
+                "-g",
+                "C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\247\\GameAssembly.dll",
+                "-m",
+                "C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\247\\Raid_Data\\il2cpp_data\\Metadata\\global-metadata.dat",
+                "-i",
+                "Unity.Plarium.Common.dll,Unity.RaidApp.dll,Unity.Model.dll,Unity.App.dll,Unity.Plarium.Common.dll",
+                "-o",
+                "RaidTest.dll"
+            ],
+            "cwd": "${workspaceFolder}/src/Generator.Cli",
+            // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}
