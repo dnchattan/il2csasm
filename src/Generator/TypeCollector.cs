@@ -39,6 +39,7 @@ namespace IL2CS.Generator
 			TypeDescriptor td = new(typeName, typeDef, m_buildTypeCallback);
 			m_typesToEmit.Enqueue(td);
 			m_typeCache.Add(typeDef, td);
+			ProcessTypes();
 			return td;
 		}
 
@@ -61,11 +62,118 @@ namespace IL2CS.Generator
 			return GetTypeDescriptor(typeDef);
 		}
 
-		private TypeReference GetTypeReference(int typeIndex)
+		private Type GetTypeReference(int il2CppTypeIndex, TypeDescriptor typeContext)
 		{
-			Il2CppType cppType = m_context.Il2Cpp.types[typeIndex];
-			string name = m_context.Executor.GetTypeName(cppType, true, false);
-			return new(name, cppType, m_buildTypeReferenceCallback);
+			Il2CppType il2CppType = m_context.Il2Cpp.types[il2CppTypeIndex];
+			return GetTypeReference(il2CppType, typeContext);
+		}
+
+		private Type GetTypeReference(Il2CppType il2CppType, TypeDescriptor typeContext)
+		{
+			string name = m_context.Executor.GetTypeName(il2CppType, true, false);
+
+			switch (il2CppType.type)
+			{
+				case Il2CppTypeEnum.IL2CPP_TYPE_ARRAY:
+					{
+						Il2CppArrayType arrayType = m_context.Il2Cpp.MapVATR<Il2CppArrayType>(il2CppType.data.array);
+						Il2CppType elementCppType = m_context.Il2Cpp.GetIl2CppType(arrayType.etype);
+						Type elementType = GetTypeReference(elementCppType, typeContext);
+						return elementType.MakeArrayType(arrayType.rank);
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_SZARRAY:
+					{
+						Il2CppType elementCppType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
+						Type elementType = GetTypeReference(elementCppType, typeContext);
+						return elementType.MakeArrayType();
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_PTR:
+					{
+						Il2CppType oriType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
+						Type ptrToType = GetTypeReference(oriType, typeContext);
+						return ptrToType.MakePointerType();
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_VAR:
+				case Il2CppTypeEnum.IL2CPP_TYPE_MVAR:
+					{
+						// TODO: Is this even remotely correct? :S
+						Il2CppGenericParameter param = m_context.Executor.GetGenericParameteFromIl2CppType(il2CppType);
+						return (typeContext.Type as TypeInfo).GenericTypeParameters[param.num];
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_CLASS:
+				case Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE:
+					{
+						Il2CppTypeDefinition typeDef = m_context.Executor.GetTypeDefinitionFromIl2CppType(il2CppType);
+						return GetTypeDescriptor(typeDef).Type;
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST:
+					{
+						Il2CppGenericClass genericClass = m_context.Il2Cpp.MapVATR<Il2CppGenericClass>(il2CppType.data.generic_class);
+						Il2CppTypeDefinition genericTypeDef = m_context.Executor.GetGenericClassTypeDefinition(genericClass);
+						Il2CppGenericInst genericInst = m_context.Il2Cpp.MapVATR<Il2CppGenericInst>(genericClass.context.class_inst);
+						List<Type> genericParameterTypes = new();
+						ulong[] pointers = m_context.Il2Cpp.MapVATR<ulong>(genericInst.type_argv, genericInst.type_argc);
+						for (int i = 0; i < genericInst.type_argc; i++)
+						{
+							Il2CppType paramCppType = m_context.Il2Cpp.GetIl2CppType(pointers[i]);
+							genericParameterTypes.Add(GetTypeReference(paramCppType, typeContext));
+						}
+						TypeDescriptor genericDescriptor = GetTypeDescriptor(genericTypeDef);
+						return genericDescriptor.Type.MakeGenericType(genericParameterTypes.ToArray());
+					}
+				default:
+					return TypeMap[(int)il2CppType.type];
+			}
+		}
+
+		private TypeReference MakeTypeReference(int typeIndex)
+		{
+			Il2CppType il2CppType = m_context.Il2Cpp.types[typeIndex];
+			return MakeTypeReference(il2CppType);
+		}
+
+		private TypeReference MakeTypeReference(Il2CppType il2CppType)
+		{
+			string name = m_context.Executor.GetTypeName(il2CppType, true, false);
+			TypeReference typeRef = new(name, il2CppType, m_buildTypeReferenceCallback);
+
+			switch (il2CppType.type)
+			{
+				case Il2CppTypeEnum.IL2CPP_TYPE_ARRAY:
+					{
+						Il2CppArrayType arrayType = m_context.Il2Cpp.MapVATR<Il2CppArrayType>(il2CppType.data.array);
+						Il2CppType elementType = m_context.Il2Cpp.GetIl2CppType(arrayType.etype);
+						typeRef.ElementType = MakeTypeReference(elementType);
+						typeRef.ArrayRank = arrayType.rank;
+						return typeRef;
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_SZARRAY:
+					{
+						Il2CppType elementType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
+						typeRef.ElementType = MakeTypeReference(elementType);
+						return typeRef;
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_PTR:
+					{
+						Il2CppType oriType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
+						typeRef.PointerOf = MakeTypeReference(oriType);
+						return typeRef;
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_VAR:
+				case Il2CppTypeEnum.IL2CPP_TYPE_MVAR:
+					{
+						Il2CppGenericParameter param = m_context.Executor.GetGenericParameteFromIl2CppType(il2CppType);
+						typeRef.TypeArgumentSlot = param.num;
+						return typeRef;
+					}
+				case Il2CppTypeEnum.IL2CPP_TYPE_CLASS:
+				case Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE:
+				case Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST:
+				// TODO
+				default:
+					typeRef.PrimitiveType = TypeMap[(int)il2CppType.type];
+					return typeRef;
+			}
 		}
 
 		private string GetTypeName(int typeIndex)
@@ -100,13 +208,20 @@ namespace IL2CS.Generator
 				td.DeclaringParent = GetTypeDescriptorOrThrow(td.TypeDef.declaringTypeIndex);
 			}
 
+			// generic parameters
+			if (td.TypeDef.genericContainerIndex != -1)
+			{
+				Il2CppGenericContainer genericContainer = m_context.Metadata.genericContainers[td.TypeDef.genericContainerIndex];
+				td.GenericParameterNames = m_context.Executor.GetGenericContainerParamNames(genericContainer);
+			}
+
 			// base class
 			if (!attribs.HasFlag(TypeAttributes.Interface) && td.TypeDef.parentIndex >= 0 && !td.TypeDef.IsValueType && !td.TypeDef.IsEnum)
 			{
 				string baseTypeName = GetTypeName(td.TypeDef.parentIndex);
 				if (baseTypeName != "System.Object")
 				{
-					td.Base = GetTypeDescriptorOrThrow(td.TypeDef.parentIndex);
+					td.Base = GetTypeReference(td.TypeDef.parentIndex, td);
 				}
 			}
 
@@ -116,15 +231,8 @@ namespace IL2CS.Generator
 				for (int i = 0; i < td.TypeDef.interfaces_count; i++)
 				{
 					int typeIndex = m_context.Metadata.interfaceIndices[td.TypeDef.interfacesStart + i];
-					td.Implements.Add(GetTypeDescriptorOrThrow(typeIndex));
+					td.Implements.Add(GetTypeReference(typeIndex, td));
 				}
-			}
-
-			// generic parameters
-			if (td.TypeDef.genericContainerIndex != -1)
-			{
-				Il2CppGenericContainer genericContainer = m_context.Metadata.genericContainers[td.TypeDef.genericContainerIndex];
-				td.GenericParameterNames = m_context.Executor.GetGenericContainerParamNames(genericContainer);
 			}
 		}
 
@@ -271,6 +379,12 @@ namespace IL2CS.Generator
 			private Type m_type;
 			private string m_name;
 			private Func<TypeReference, Type> m_buildTypeReference;
+
+			public TypeReference ElementType;
+			public int? ArrayRank;
+			public TypeReference PointerOf;
+			public ushort? TypeArgumentSlot;
+			public Type PrimitiveType;
 			public readonly Il2CppType CppType;
 		}
 
@@ -329,13 +443,11 @@ namespace IL2CS.Generator
 			private bool m_hasType;
 			private readonly Func<TypeDescriptor, Type> m_buildTypeDelegate;
 			public readonly Il2CppTypeDefinition TypeDef;
-			public readonly List<TypeDescriptor> Implements = new();
+			public readonly List<Type> Implements = new();
 			public TypeDescriptor DeclaringParent;
 			public TypeDescriptor GenericParent;
-			public TypeDescriptor ElementType;
-			public int? ArrayRank;
-			public TypeDescriptor[] GenericTypeParams;
-			public TypeDescriptor Base;
+			public Type[] GenericTypeParams;
+			public Type Base;
 			public string[] GenericParameterNames = Array.Empty<string>();
 		}
 
@@ -361,6 +473,27 @@ namespace IL2CS.Generator
 			public Type Result { get; set; }
 		}
 
+		private static readonly Dictionary<int, Type> TypeMap = new Dictionary<int, Type>
+		{
+			{1,typeof(void)},
+			{2,typeof(bool)},
+			{3,typeof(char)},
+			{4,typeof(sbyte)},
+			{5,typeof(byte)},
+			{6,typeof(short)},
+			{7,typeof(ushort)},
+			{8,typeof(int)},
+			{9,typeof(uint)},
+			{10,typeof(long)},
+			{11,typeof(ulong)},
+			{12,typeof(float)},
+			{13,typeof(double)},
+			{14,typeof(string)},
+			{22,typeof(IntPtr)},
+			{24,typeof(IntPtr)},
+			{25,typeof(UIntPtr)},
+			{28,typeof(object)},
+		};
 		public event EventHandler<ResolveTypeBuilderEventArgs> OnResolveType;
 		public event EventHandler<ResolveTypeReferenceEventArgs> OnResolveTypeReference;
 		private readonly Func<TypeDescriptor, Type> m_buildTypeCallback;
