@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
+using System.Text.RegularExpressions;
 using Il2CppDumper;
+using IL2CS.Runtime;
 using Microsoft.Extensions.Logging;
 
 namespace IL2CS.Generator
@@ -15,7 +17,6 @@ namespace IL2CS.Generator
 			m_context = context;
 			m_logger = context.Options.LogFactory.CreateLogger("type-collector");
 			m_buildTypeCallback = (descriptor) => BuildType(descriptor);
-			m_buildTypeReferenceCallback = (reference) => BuildTypeReference(reference);
 		}
 
 		public void CollectTypeDefinition(Il2CppTypeDefinition typeDef)
@@ -35,7 +36,6 @@ namespace IL2CS.Generator
 
 		public TypeDescriptor MakeTypeDescriptor(string typeName, Il2CppTypeDefinition typeDef)
 		{
-			Il2CppType typeInfo = m_context.Executor.GetIl2CppTypeFromTypeDefinition(typeDef);
 			TypeDescriptor td = new(typeName, typeDef, m_buildTypeCallback);
 			m_typesToEmit.Enqueue(td);
 			m_typeCache.Add(typeDef, td);
@@ -119,60 +119,10 @@ namespace IL2CS.Generator
 							genericParameterTypes.Add(GetTypeReference(paramCppType, typeContext));
 						}
 						TypeDescriptor genericDescriptor = GetTypeDescriptor(genericTypeDef);
-						return genericDescriptor.Type.MakeGenericType(genericParameterTypes.ToArray());
+						return genericDescriptor.Type?.MakeGenericType(genericParameterTypes.ToArray());
 					}
 				default:
 					return TypeMap[(int)il2CppType.type];
-			}
-		}
-
-		private TypeReference MakeTypeReference(int typeIndex)
-		{
-			Il2CppType il2CppType = m_context.Il2Cpp.types[typeIndex];
-			return MakeTypeReference(il2CppType);
-		}
-
-		private TypeReference MakeTypeReference(Il2CppType il2CppType)
-		{
-			string name = m_context.Executor.GetTypeName(il2CppType, true, false);
-			TypeReference typeRef = new(name, il2CppType, m_buildTypeReferenceCallback);
-
-			switch (il2CppType.type)
-			{
-				case Il2CppTypeEnum.IL2CPP_TYPE_ARRAY:
-					{
-						Il2CppArrayType arrayType = m_context.Il2Cpp.MapVATR<Il2CppArrayType>(il2CppType.data.array);
-						Il2CppType elementType = m_context.Il2Cpp.GetIl2CppType(arrayType.etype);
-						typeRef.ElementType = MakeTypeReference(elementType);
-						typeRef.ArrayRank = arrayType.rank;
-						return typeRef;
-					}
-				case Il2CppTypeEnum.IL2CPP_TYPE_SZARRAY:
-					{
-						Il2CppType elementType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
-						typeRef.ElementType = MakeTypeReference(elementType);
-						return typeRef;
-					}
-				case Il2CppTypeEnum.IL2CPP_TYPE_PTR:
-					{
-						Il2CppType oriType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
-						typeRef.PointerOf = MakeTypeReference(oriType);
-						return typeRef;
-					}
-				case Il2CppTypeEnum.IL2CPP_TYPE_VAR:
-				case Il2CppTypeEnum.IL2CPP_TYPE_MVAR:
-					{
-						Il2CppGenericParameter param = m_context.Executor.GetGenericParameteFromIl2CppType(il2CppType);
-						typeRef.TypeArgumentSlot = param.num;
-						return typeRef;
-					}
-				case Il2CppTypeEnum.IL2CPP_TYPE_CLASS:
-				case Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE:
-				case Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST:
-				// TODO
-				default:
-					typeRef.PrimitiveType = TypeMap[(int)il2CppType.type];
-					return typeRef;
 			}
 		}
 
@@ -194,7 +144,7 @@ namespace IL2CS.Generator
 			}
 			foreach (TypeDescriptor td in descriptors)
 			{
-				td.GetTypeBuilder();
+				td.EnsureType();
 			}
 		}
 
@@ -216,7 +166,15 @@ namespace IL2CS.Generator
 			}
 
 			// base class
-			if (!attribs.HasFlag(TypeAttributes.Interface) && td.TypeDef.parentIndex >= 0 && !td.TypeDef.IsValueType && !td.TypeDef.IsEnum)
+			if (attribs.HasFlag(TypeAttributes.Interface))
+			{
+				td.Base = null;
+			}
+			else if (td.TypeDef.IsEnum)
+			{
+				td.Base= typeof(Enum);
+			}
+			else if (td.TypeDef.parentIndex >= 0 && !td.TypeDef.IsValueType && !td.TypeDef.IsEnum)
 			{
 				string baseTypeName = GetTypeName(td.TypeDef.parentIndex);
 				if (baseTypeName != "System.Object")
@@ -224,111 +182,101 @@ namespace IL2CS.Generator
 					td.Base = GetTypeReference(td.TypeDef.parentIndex, td);
 				}
 			}
+			else
+			{
+				td.Base = typeof(StructBase);
+			}
 
 			// interfaces
-			if (td.TypeDef.interfaces_count > 0)
+			foreach (int interfaceTypeIndex in EnumerateMetadata(td.TypeDef.interfacesStart, td.TypeDef.interfaces_count, m_context.Metadata.interfaceIndices))
 			{
-				for (int i = 0; i < td.TypeDef.interfaces_count; i++)
+				td.Implements.Add(GetTypeReference(interfaceTypeIndex, td));
+			}
+
+			// fields
+			if (td.TypeDef.field_count > 0)
+			{
+				foreach (int fieldIndex in Enumerable.Range(td.TypeDef.fieldStart, td.TypeDef.field_count))
 				{
-					int typeIndex = m_context.Metadata.interfaceIndices[td.TypeDef.interfacesStart + i];
-					td.Implements.Add(GetTypeReference(typeIndex, td));
+					Il2CppFieldDefinition fieldDef = m_context.Metadata.fieldDefs[fieldIndex];
+					Il2CppType fieldCppType = m_context.Il2Cpp.types[fieldDef.typeIndex];
+					Type fieldType = GetTypeReference(fieldCppType, td);
+					string fieldName = m_context.Metadata.GetStringFromIndex(fieldDef.nameIndex);
+					FieldAttributes attrs = (FieldAttributes)fieldCppType.attrs & ~FieldAttributes.InitOnly;
+					FieldDescriptor fieldDescriptor = new(fieldName, fieldType, attrs);
+					if (m_context.Metadata.GetFieldDefaultValueFromIndex(fieldIndex, out Il2CppFieldDefaultValue fieldDefaultValue) && fieldDefaultValue.dataIndex != -1)
+					{
+						if (TryGetDefaultValue(fieldDefaultValue.typeIndex, fieldDefaultValue.dataIndex, out object value))
+						{
+							fieldDescriptor.DefaultValue = value;
+						}
+					}
+					td.Fields.Add(fieldDescriptor);
 				}
 			}
 		}
 
-		//public TypeDescriptor GetTypeDescriptor(Il2CppType typeInfo)
-		//{
-		//    string typeName = m_context.Executor.GetTypeName(typeInfo, true, false);
+		private static IEnumerable<T> EnumerateMetadata<T>(int start, int count, T[] definitionArray)
+		{
+			if (count <= 0 || start < 0)
+			{
+				return Array.Empty<T>();
+			}
+			return definitionArray.AsSpan().Slice(start, count).ToArray();
+		}
 
-		//    if (m_typeCache.TryGetValue(typeName, out TypeDescriptor cachedType))
-		//    {
-		//        return cachedType;
-		//    }
-		//    TypeDescriptor td = CreateTypeDescriptor(typeName, typeInfo);
-		//    return td;
-		//}
-
-		//private TypeDescriptor CreateTypeDescriptor(string typeName, Il2CppType typeInfo)
-		//{
-		//    TypeDescriptor td = new(typeName, typeInfo, m_buildTypeCallback);
-		//    if (typeInfo.type != Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST)
-		//    {
-		//        m_typesToEmit.Add(td);
-		//    }
-		//    m_typeCache.Add(typeName, td);
-
-		//    if (typeInfo.type == Il2CppTypeEnum.IL2CPP_TYPE_ARRAY || typeInfo.type == Il2CppTypeEnum.IL2CPP_TYPE_SZARRAY)
-		//    {
-		//        Il2CppType elementType;
-		//        if (typeInfo.type == Il2CppTypeEnum.IL2CPP_TYPE_ARRAY)
-		//        {
-		//            Il2CppArrayType arrayType = m_context.Il2Cpp.MapVATR<Il2CppArrayType>(typeInfo.data.array);
-		//            elementType = m_context.Il2Cpp.GetIl2CppType(arrayType.etype);
-		//            td.ArrayRank = arrayType.rank;
-		//        }
-		//        else
-		//        {
-		//            elementType = m_context.Il2Cpp.GetIl2CppType(typeInfo.data.type);
-		//        }
-		//        td.ElementType = GetTypeDescriptor(elementType);
-		//        return td;
-		//    }
-
-		//    // NB: Will get generic type definition if this is a generic instance type
-		//    Il2CppTypeDefinition typeDef = m_context.Executor.GetTypeDefinitionFromIl2CppType(typeInfo);
-		//    TypeAttributes attribs = Helpers.GetTypeAttributes(typeDef);
-
-		//    // base class?
-		//    if (!attribs.HasFlag(TypeAttributes.Interface) && typeDef.parentIndex >= 0 && !typeDef.IsValueType && !typeDef.IsEnum)
-		//    {
-		//        Il2CppType parent = m_context.Il2Cpp.types[typeDef.parentIndex];
-		//        string parentName = m_context.Executor.GetTypeName(parent, true, false);
-		//        if (parentName != "System.Object")
-		//        {
-		//            td.Base = GetTypeDescriptor(parent);
-		//        }
-		//    }
-
-		//    // nested type?
-		//    if (typeDef.declaringTypeIndex != -1)
-		//    {
-		//        Il2CppType declaringType = m_context.Il2Cpp.types[typeDef.declaringTypeIndex];
-		//        td.DeclaringParent = GetTypeDescriptor(declaringType);
-		//    }
-
-		//    // interfaces
-		//    if (typeDef.interfaces_count > 0)
-		//    {
-		//        for (int i = 0; i < typeDef.interfaces_count; i++)
-		//        {
-		//            Il2CppType interfaceType = m_context.Il2Cpp.types[m_context.Metadata.interfaceIndices[typeDef.interfacesStart + i]];
-		//            td.Implements.Add(GetTypeDescriptor(interfaceType));
-		//        }
-		//    }
-
-		//    // generic
-		//    if (typeInfo.type == Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST)
-		//    {
-		//        Il2CppGenericClass genericClass = m_context.Il2Cpp.MapVATR<Il2CppGenericClass>(typeInfo.data.generic_class);
-		//        Il2CppTypeDefinition genericTypeDef = m_context.Metadata.typeDefs[genericClass.typeDefinitionIndex];
-		//        Il2CppType genericTypeInfo = m_context.Il2Cpp.types[genericTypeDef.byrefTypeIndex];
-		//        //Il2CppGenericContainer genericContainer = m_context.Metadata.genericContainers[genericTypeDef.genericContainerIndex];
-		//        //Il2CppType genericTypeInfo = m_context.Il2Cpp.types[genericContainer.ownerIndex];
-		//        if (genericTypeInfo == typeInfo)
-		//        {
-		//            m_logger.LogError($"Invalid type: {typeName} (self-referencing-generic)");
-		//            throw new ApplicationException($"Invalid type: {typeName} (self-referencing-generic)");
-		//        }
-		//        td.GenericParent = GetTypeDescriptor(genericTypeInfo);
-
-		//        // Il2CppTypeDefinition genericTypeDef = m_context.Executor.GetGenericClassTypeDefinition(genericClass);
-		//        Il2CppGenericInst genericInst = m_context.Il2Cpp.MapVATR<Il2CppGenericInst>(genericClass.context.class_inst);
-		//        Il2CppType[] typeParams = m_context.Executor.GetGenericInstParamList(genericInst);
-		//        td.GenericTypeParams = typeParams.Select(tp => GetTypeDescriptor(tp)).ToArray();
-		//    }
-
-		//    return td;
-		//}
+		private bool TryGetDefaultValue(int typeIndex, int dataIndex, out object value)
+		{
+			var pointer = m_context.Metadata.GetDefaultValueFromIndex(dataIndex);
+			var defaultValueType = m_context.Il2Cpp.types[typeIndex];
+			m_context.Metadata.Position = pointer;
+			switch (defaultValueType.type)
+			{
+				case Il2CppTypeEnum.IL2CPP_TYPE_BOOLEAN:
+					value = m_context.Metadata.ReadBoolean();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_U1:
+					value = m_context.Metadata.ReadByte();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_I1:
+					value = m_context.Metadata.ReadSByte();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_CHAR:
+					value = BitConverter.ToChar(m_context.Metadata.ReadBytes(2), 0);
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_U2:
+					value = m_context.Metadata.ReadUInt16();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_I2:
+					value = m_context.Metadata.ReadInt16();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_U4:
+					value = m_context.Metadata.ReadUInt32();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_I4:
+					value = m_context.Metadata.ReadInt32();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_U8:
+					value = m_context.Metadata.ReadUInt64();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_I8:
+					value = m_context.Metadata.ReadInt64();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_R4:
+					value = m_context.Metadata.ReadSingle();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_R8:
+					value = m_context.Metadata.ReadDouble();
+					return true;
+				case Il2CppTypeEnum.IL2CPP_TYPE_STRING:
+					var len = m_context.Metadata.ReadInt32();
+					value = m_context.Metadata.ReadString(len);
+					return true;
+				default:
+					value = pointer;
+					return false;
+			}
+		}
 
 		private Type BuildType(TypeDescriptor descriptor)
 		{
@@ -337,55 +285,29 @@ namespace IL2CS.Generator
 			return args.Result;
 		}
 
-		private Type BuildTypeReference(TypeReference reference)
-		{
-			ResolveTypeReferenceEventArgs args = new(reference);
-			OnResolveTypeReference?.Invoke(this, args);
-			return args.Result;
-		}
-
 		public interface ITypeReference
 		{
 			public Type Type { get; }
 		}
 
-		public class TypeReference : ITypeReference
+		public class FieldDescriptor
 		{
-			public TypeReference(string name, Il2CppType cppType, Func<TypeReference, Type> buildTypeReference)
+			private static readonly Regex BackingFieldRegex = new("<(.+)>k__BackingField", RegexOptions.Compiled);
+
+			public FieldDescriptor(string name, Type type, FieldAttributes attrs)
 			{
-				m_name = name;
-				CppType = cppType;
-				m_buildTypeReference = buildTypeReference;
+				Name = BackingFieldRegex.Replace(name, match => match.Groups[1].Value);
+				// this is kinda evil, but it will make them consistent in name at least =)
+				StorageName = $"_{Name}_BackingField";
+				Type = type;
+				Attributes = attrs;
 			}
 
-			public string Name => m_name;
-
-			public Type Type
-			{
-				get { EnsureType(); return m_type; }
-			}
-
-			private void EnsureType()
-			{
-				if (m_hasType)
-				{
-					return;
-				}
-				m_type = m_buildTypeReference(this);
-				m_hasType = true;
-			}
-
-			private bool m_hasType;
-			private Type m_type;
-			private string m_name;
-			private Func<TypeReference, Type> m_buildTypeReference;
-
-			public TypeReference ElementType;
-			public int? ArrayRank;
-			public TypeReference PointerOf;
-			public ushort? TypeArgumentSlot;
-			public Type PrimitiveType;
-			public readonly Il2CppType CppType;
+			public readonly string StorageName;
+			public readonly string Name;
+			public readonly Type Type;
+			public FieldAttributes Attributes;
+			public object DefaultValue;
 		}
 
 		[DebuggerDisplay("{DebuggerDisplay,nq}")]
@@ -403,25 +325,21 @@ namespace IL2CS.Generator
 				get { EnsureType(); return m_type; }
 			}
 
-			public TypeBuilder GetTypeBuilder()
-			{
-				EnsureType();
-				return m_type as TypeBuilder;
-			}
-
 			public Type GetGeneratedType()
 			{
 				EnsureType();
 				return m_type;
 			}
 
-			private void EnsureType()
+			internal void EnsureType()
 			{
 				if (m_hasType)
 				{
 					return;
 				}
-				m_type = Type.GetType(Name) ?? m_buildTypeDelegate(this);
+				// TODO: I think we can stop testing for system types here since this is for typedefs only
+				//m_type = Type.GetType(Name) ?? m_buildTypeDelegate(this);
+				m_type = m_buildTypeDelegate(this);
 				m_hasType = true;
 			}
 
@@ -437,6 +355,17 @@ namespace IL2CS.Generator
 					return $"{m_name}`{GenericParameterNames.Length }";
 				}
 			}
+			public string FullName
+			{
+				get
+				{
+					if (DeclaringParent != null)
+					{
+						return $"{DeclaringParent.FullName}+{m_name.Split('.').Last()}";
+					}
+					return Name;
+				}
+			}
 
 			public readonly string m_name;
 			private Type m_type;
@@ -449,6 +378,7 @@ namespace IL2CS.Generator
 			public Type[] GenericTypeParams;
 			public Type Base;
 			public string[] GenericParameterNames = Array.Empty<string>();
+			public readonly List<FieldDescriptor> Fields = new();
 		}
 
 		public class ResolveTypeBuilderEventArgs : EventArgs
@@ -459,17 +389,6 @@ namespace IL2CS.Generator
 			}
 
 			public TypeDescriptor Request { get; private set; }
-			public Type Result { get; set; }
-		}
-
-		public class ResolveTypeReferenceEventArgs : EventArgs
-		{
-			public ResolveTypeReferenceEventArgs(TypeReference request)
-			{
-				Request = request;
-			}
-
-			public TypeReference Request { get; private set; }
 			public Type Result { get; set; }
 		}
 
@@ -495,9 +414,7 @@ namespace IL2CS.Generator
 			{28,typeof(object)},
 		};
 		public event EventHandler<ResolveTypeBuilderEventArgs> OnResolveType;
-		public event EventHandler<ResolveTypeReferenceEventArgs> OnResolveTypeReference;
 		private readonly Func<TypeDescriptor, Type> m_buildTypeCallback;
-		private readonly Func<TypeReference, Type> m_buildTypeReferenceCallback;
 		private readonly AssemblyGeneratorContext m_context;
 		private readonly ILogger m_logger;
 		private readonly Dictionary<Il2CppTypeDefinition, TypeDescriptor> m_typeCache = new();

@@ -8,6 +8,7 @@ namespace IL2CS.Generator
 	{
 		public static TypeAttributes GetTypeAttributes(Il2CppTypeDefinition typeDef)
 		{
+			//return (TypeAttributes)typeDef.flags;
 			TypeAttributes attrs = default(TypeAttributes);
 			var visibility = typeDef.flags & TYPE_ATTRIBUTE_VISIBILITY_MASK;
 			switch (visibility)

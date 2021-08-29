@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using Il2CppDumper;
+using IL2CS.Runtime;
 using Microsoft.Extensions.Logging;
 using static IL2CS.Generator.TypeCollector;
 
@@ -23,6 +24,7 @@ namespace IL2CS.Generator
 		private readonly AssemblyGeneratorContext m_context;
 		private readonly TypeCollector m_collector;
 		private readonly ILogger m_logger;
+		private Dictionary<int, string> m_typeToImageName = new();
 		public AssemblyGenerator2(AssemblyGeneratorOptions options)
 		{
 			m_options = options;
@@ -61,13 +63,33 @@ namespace IL2CS.Generator
 
 		public void GenerateType(TypeDescriptor descriptor)
 		{
-			descriptor.GetTypeBuilder();
+			if (descriptor.Type == null)
+			{
+				m_logger.LogWarning($"TypeDescriptor '{descriptor.Name}' did not generate a type");
+			}
 		}
 
 		public void ResolveTypeBuilder(object sender, ResolveTypeBuilderEventArgs eventArgs)
 		{
 			TypeDescriptor descriptor = eventArgs.Request;
-			TypeBuilder genericParent = descriptor.GenericParent?.GetTypeBuilder();
+			try
+			{
+				int typeIndex = Array.IndexOf(m_context.Metadata.typeDefs, descriptor.TypeDef);
+				string imageName = m_typeToImageName[typeIndex];
+				Type builtInType = Type.GetType($"{descriptor.FullName}, System.Private.CoreLib") ?? Type.GetType($"{descriptor.FullName}, {imageName}");
+				if (builtInType != null)
+				{
+					eventArgs.Result = builtInType;
+					return;
+				}
+				if (descriptor.FullName.StartsWith("System."))
+				{
+					return;
+				}
+			}
+			catch { }
+
+			TypeBuilder genericParent = descriptor.GenericParent?.Type as TypeBuilder;
 			if (genericParent != null)
 			{
 				eventArgs.Result = genericParent.MakeGenericType(descriptor.GenericTypeParams);
@@ -77,43 +99,35 @@ namespace IL2CS.Generator
 			Il2CppTypeDefinition typeDef = descriptor.TypeDef;
 			TypeAttributes attribs = Helpers.GetTypeAttributes(typeDef);
 
-			Type baseType;
-			if (typeDef.IsEnum)
-			{
-				baseType = typeof(Enum);
-				// TODO: CURRENT CRASH IS HERE BECAUSE WE'RE RETURNING A NULL TYPE FOR ENUMS!!!
-				// return;
-			}
-			else
-			{
-				baseType = descriptor.Base;
-			}
-
-			string[] genericParametersNames = Array.Empty<string>();
-			if (typeDef.genericContainerIndex >= 0)
-			{
-				Il2CppGenericContainer genericContainer = m_context.Metadata.genericContainers[typeDef.genericContainerIndex];
-				genericParametersNames = m_context.Executor.GetGenericContainerParamNames(genericContainer);
-			}
-
 			TypeBuilder tb;
-			TypeBuilder declaringType = descriptor.DeclaringParent?.GetTypeBuilder();
+			TypeBuilder declaringType = descriptor.DeclaringParent?.Type as TypeBuilder;
 			if (descriptor.DeclaringParent != null && declaringType == null)
 			{
 				Debugger.Break();
 			}
 			if (declaringType != null)
 			{
-				tb = declaringType.DefineNestedType(descriptor.Name, attribs, baseType);
+				tb = declaringType.DefineNestedType(descriptor.Name, attribs, descriptor.Base);
 			}
 			else
 			{
-				tb = m_module.DefineType(descriptor.Name, attribs, baseType);
+				tb = m_module.DefineType(descriptor.Name, attribs, descriptor.Base);
 			}
+			// TODO: Type Attributes
 
 			if (descriptor.GenericParameterNames.Length > 0)
 			{
 				tb.DefineGenericParameters(descriptor.GenericParameterNames);
+			}
+
+			foreach(FieldDescriptor field in descriptor.Fields)
+			{
+				FieldBuilder fb = tb.DefineField(field.StorageName, field.Type, field.Attributes);
+				if (field.DefaultValue != null)
+				{
+					fb.SetConstant(field.DefaultValue);
+				}
+				// TODO: Field Attributes
 			}
 
 			// TODO:
@@ -128,6 +142,7 @@ namespace IL2CS.Generator
 
 		public void Generate(string outputPath)
 		{
+
 			foreach (Il2CppImageDefinition imageDef in m_context.Metadata.imageDefs)
 			{
 				string imageName = m_context.Metadata.GetStringFromIndex(imageDef.nameIndex);
@@ -150,6 +165,19 @@ namespace IL2CS.Generator
 				outputFile = System.IO.Path.Join(outputPath, $"{m_asmName.Name}.dll");
 			}
 			generator.GenerateAssembly(m_asm, outputFile);
+		}
+
+		private void IndexTypeImageMapping()
+		{
+			foreach (Il2CppImageDefinition imageDef in m_context.Metadata.imageDefs)
+			{
+				string imageName = m_context.Metadata.GetStringFromIndex(imageDef.nameIndex).Replace(".dll", "");
+				long typeEnd = imageDef.typeStart + imageDef.typeCount;
+				for (int typeDefIndex = imageDef.typeStart; typeDefIndex < typeEnd; typeDefIndex++)
+				{
+					m_typeToImageName.Add(typeDefIndex, imageName);
+				}
+			}
 		}
 	}
 }
