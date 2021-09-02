@@ -16,7 +16,7 @@ namespace IL2CS.Generator
 		{
 			m_context = context;
 			m_logger = context.Options.LogFactory.CreateLogger("type-collector");
-			m_buildTypeCallback = (descriptor) => BuildType(descriptor);
+			m_buildTypeCallback = BuildType;
 		}
 
 		public void CollectTypeDefinition(Il2CppTypeDefinition typeDef)
@@ -70,8 +70,6 @@ namespace IL2CS.Generator
 
 		private Type GetTypeReference(Il2CppType il2CppType, TypeDescriptor typeContext)
 		{
-			string name = m_context.Executor.GetTypeName(il2CppType, true, false);
-
 			switch (il2CppType.type)
 			{
 				case Il2CppTypeEnum.IL2CPP_TYPE_ARRAY:
@@ -278,6 +276,7 @@ namespace IL2CS.Generator
 			}
 		}
 
+		[DebuggerStepThrough]
 		private Type BuildType(TypeDescriptor descriptor)
 		{
 			ResolveTypeBuilderEventArgs args = new(descriptor);

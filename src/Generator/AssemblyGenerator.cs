@@ -53,10 +53,6 @@ namespace IL2CS.Generator
 			Dictionary<TypeBuilder, Il2CppTypeDefinitionInfo> types = new();
 			foreach (Il2CppTypeDefinitionInfo typeDef in m_index.TypeInfoList)
 			{
-				if (!m_options.IncludeImages.Contains(typeDef.ImageName))
-				{
-					continue;
-				}
 				if (typeDef.Type.TypeName.IndexOfAny(new char[] { '<', '>', '_', '(', ')', '`' }) > -1)
 				{
 					continue;

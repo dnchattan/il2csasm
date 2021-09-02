@@ -33,20 +33,22 @@ namespace IL2CS.Generator.Cli
 			Parser.Default.ParseArguments<Options>(args)
 			.WithParsed(o =>
 			{
-				using LoggingScope scope = new();
-				AssemblyGenerator2 asm = new(new AssemblyGeneratorOptions
+				using (LoggingScope scope = new())
 				{
-					LogFactory = scope.Factory,
-					AssembyName = o.AssemblyName,
-					GameAssemblyPath = o.GameAssemblyPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\GameAssembly.dll",
-					MetadataPath = o.MetadataPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\Raid_Data\il2cpp_data\Metadata\global-metadata.dat",
-					IncludeImages = o.IncludeImage.ToArray() /*new string[] {
-						"Unity.Plarium.Common.dll",
-						"Unity.RaidApp.dll",
-						"Unity.Model.dll"
-					}*/
-				});
-				asm.Generate(o.OutputPath);
+					TypeManagement.AssemblyGenerator asm = new(new AssemblyGeneratorOptions
+					{
+						LogFactory = scope.Factory,
+						AssembyName = o.AssemblyName,
+						GameAssemblyPath = o.GameAssemblyPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\GameAssembly.dll",
+						MetadataPath = o.MetadataPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\Raid_Data\il2cpp_data\Metadata\global-metadata.dat",
+						TypeSelectors = new System.Func<TypeManagement.TypeDescriptor, bool>[]
+						{
+							td => td.Name == "Client.Model.AppModel"
+						}
+					});
+					asm.Generate();
+					//asm.Generate(o.OutputPath);
+				}
 			});
 		}
 	}

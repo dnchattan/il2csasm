@@ -72,22 +72,22 @@ namespace IL2CS.Generator
 		public void ResolveTypeBuilder(object sender, ResolveTypeBuilderEventArgs eventArgs)
 		{
 			TypeDescriptor descriptor = eventArgs.Request;
-			try
-			{
-				int typeIndex = Array.IndexOf(m_context.Metadata.typeDefs, descriptor.TypeDef);
-				string imageName = m_typeToImageName[typeIndex];
-				Type builtInType = Type.GetType($"{descriptor.FullName}, System.Private.CoreLib") ?? Type.GetType($"{descriptor.FullName}, {imageName}");
-				if (builtInType != null)
-				{
-					eventArgs.Result = builtInType;
-					return;
-				}
-				if (descriptor.FullName.StartsWith("System."))
-				{
-					return;
-				}
-			}
-			catch { }
+			//try
+			//{
+			//	int typeIndex = Array.IndexOf(m_context.Metadata.typeDefs, descriptor.TypeDef);
+			//	string imageName = m_typeToImageName[typeIndex];
+			//	Type builtInType = Type.GetType($"{descriptor.FullName}, System.Private.CoreLib") ?? Type.GetType($"{descriptor.FullName}, {imageName}");
+			//	if (builtInType != null)
+			//	{
+			//		eventArgs.Result = builtInType;
+			//		return;
+			//	}
+			//	if (descriptor.FullName.StartsWith("System."))
+			//	{
+			//		return;
+			//	}
+			//}
+			//catch { }
 
 			TypeBuilder genericParent = descriptor.GenericParent?.Type as TypeBuilder;
 			if (genericParent != null)
@@ -111,6 +111,10 @@ namespace IL2CS.Generator
 			}
 			else
 			{
+				if ((attribs & TypeAttributes.VisibilityMask) == TypeAttributes.NestedPrivate || (attribs & TypeAttributes.VisibilityMask) == TypeAttributes.NestedPublic)
+				{
+					Debugger.Break();
+				}
 				tb = m_module.DefineType(descriptor.Name, attribs, descriptor.Base);
 			}
 			// TODO: Type Attributes
@@ -142,14 +146,9 @@ namespace IL2CS.Generator
 
 		public void Generate(string outputPath)
 		{
-
 			foreach (Il2CppImageDefinition imageDef in m_context.Metadata.imageDefs)
 			{
 				string imageName = m_context.Metadata.GetStringFromIndex(imageDef.nameIndex);
-				if (!m_options.IncludeImages.Contains(imageName))
-				{
-					continue;
-				}
 				ProcessImage(imageDef);
 			}
 			m_collector.ProcessTypes();

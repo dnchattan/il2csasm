@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Diagnostics;
+using System.Reflection;
 using Il2CppDumper;
 using static Il2CppDumper.Il2CppConstants;
 
@@ -6,6 +7,18 @@ namespace IL2CS.Generator
 {
 	internal static class Helpers
 	{
+		public static void Assert(bool condition, string message)
+		{
+			if (condition)
+			{
+				return;
+			}
+			Trace.WriteLine($"Assertion failed: {message}");
+			if (Debugger.IsAttached)
+			{
+				Debugger.Break();
+			}
+		}
 		public static TypeAttributes GetTypeAttributes(Il2CppTypeDefinition typeDef)
 		{
 			//return (TypeAttributes)typeDef.flags;
