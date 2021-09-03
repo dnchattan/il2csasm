@@ -35,7 +35,7 @@ namespace IL2CS.Generator.Cli
 			{
 				using (LoggingScope scope = new())
 				{
-					TypeManagement.AssemblyGenerator asm = new(new AssemblyGeneratorOptions
+					AssemblyGenerator asm = new(new AssemblyGeneratorOptions
 					{
 						LogFactory = scope.Factory,
 						AssembyName = o.AssemblyName,
@@ -46,8 +46,7 @@ namespace IL2CS.Generator.Cli
 							td => td.Name == "Client.Model.AppModel"
 						}
 					});
-					asm.Generate();
-					//asm.Generate(o.OutputPath);
+					asm.Generate(o.OutputPath);
 				}
 			});
 		}

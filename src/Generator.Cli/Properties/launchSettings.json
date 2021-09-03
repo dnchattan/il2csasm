@@ -2,7 +2,8 @@
   "profiles": {
     "Generator.Cli": {
       "commandName": "Project",
-      "commandLineArgs": "-v -n RaidTest -g C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\248\\GameAssembly.dll -m C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\248\\Raid_Data\\il2cpp_data\\Metadata\\global-metadata.dat -i Unity.Plarium.Common.dll,Unity.RaidApp.dll,Unity.Model.dll,Unity.App.dll,Unity.Plarium.Common.dll -o RaidTest.dll"
+      "commandLineArgs": "-v -n RaidTest -g C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\248\\GameAssembly.dll -m C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\248\\Raid_Data\\il2cpp_data\\Metadata\\global-metadata.dat -i Unity.Plarium.Common.dll,Unity.RaidApp.dll,Unity.Model.dll,Unity.App.dll,Unity.Plarium.Common.dll -o RaidTest.dll",
+      "nativeDebugging": false
     }
   }
 }

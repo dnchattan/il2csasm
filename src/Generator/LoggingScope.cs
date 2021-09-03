@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Linq;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
-using Microsoft.Extensions.Options;
 
 namespace IL2CS.Generator
 {
@@ -12,11 +9,14 @@ namespace IL2CS.Generator
 
 		public LoggingScope()
 		{
-			Factory = LoggerFactory.Create(builder => builder.AddSimpleConsole(options =>
-			{
-				options.IncludeScopes = true;
-				options.TimestampFormat = "hh:mm:ss ";
-			}));
+			Factory = LoggerFactory.Create(builder => builder
+				.AddFilter("generator", LogLevel.Trace)
+				.AddSimpleConsole(options =>
+				{
+					options.IncludeScopes = true;
+					options.TimestampFormat = "hh:mm:ss ";
+				})
+			);
 		}
 
 		public ILogger<T> CreateLogger<T>()
