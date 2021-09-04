@@ -13,6 +13,15 @@ namespace IL2CS.Runtime
 		public bool Static { get; set; }
 		private MemoryCacheEntry Cache { get; set; }
 
+		protected virtual uint? Native__ObjectSize
+		{
+			get
+			{
+				SizeAttribute sizeAttr = GetType().GetCustomAttribute<SizeAttribute>(inherit: true);
+				return sizeAttr?.Size;
+			}
+		}
+
 		public void Load(Il2CsRuntimeContext context, long address)
 		{
 			Context = context;
@@ -29,7 +38,7 @@ namespace IL2CS.Runtime
 			return cast;
 		}
 
-		private void ReadFields()
+		protected virtual void ReadFields()
 		{
 			FieldInfo[] fields = GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
 
@@ -103,26 +112,21 @@ namespace IL2CS.Runtime
 			}
 		}
 
-		private void EnsureCache()
+		protected virtual void EnsureCache()
 		{
-			if (Cache != null)
+			if (Cache != null || !Native__ObjectSize.HasValue)
 			{
 				return;
 			}
-			SizeAttribute sizeAttr = GetType().GetCustomAttribute<SizeAttribute>(inherit: true);
-			if (sizeAttr == null)
-			{
-				return;
-			}
+			uint? size = Native__ObjectSize;
 			IntPtr handle = NativeWrapper.OpenProcess(ProcessAccessFlags.Read, inheritHandle: true, Context.TargetProcess.Id);
-			byte[] buffer = new byte[sizeAttr.Size];
+			byte[] buffer = new byte[size.Value];
 			if (!NativeWrapper.ReadProcessMemoryArray(handle, (IntPtr)Address, buffer))
 			{
 				throw new ApplicationException("Failed to read memory location");
 			}
-			Cache = Context.CacheMemory(Address, sizeAttr.Size);
+			Cache = Context.CacheMemory(Address, size.Value);
 		}
-
 	}
 
 	public abstract class StaticStructBase : StructBase

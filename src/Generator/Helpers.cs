@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using Il2CppDumper;
 using static Il2CppDumper.Il2CppConstants;
@@ -19,6 +21,29 @@ namespace IL2CS.Generator
 				Debugger.Break();
 			}
 		}
+
+		public static readonly Dictionary<int, Type> TypeMap = new Dictionary<int, Type>
+		{
+			{1,typeof(void)},
+			{2,typeof(bool)},
+			{3,typeof(char)},
+			{4,typeof(sbyte)},
+			{5,typeof(byte)},
+			{6,typeof(short)},
+			{7,typeof(ushort)},
+			{8,typeof(int)},
+			{9,typeof(uint)},
+			{10,typeof(long)},
+			{11,typeof(ulong)},
+			{12,typeof(float)},
+			{13,typeof(double)},
+			{14,typeof(string)},
+			{22,typeof(IntPtr)},
+			{24,typeof(IntPtr)},
+			{25,typeof(UIntPtr)},
+			{28,typeof(object)},
+		};
+
 		public static TypeAttributes GetTypeAttributes(Il2CppTypeDefinition typeDef)
 		{
 			//return (TypeAttributes)typeDef.flags;

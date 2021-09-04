@@ -6,6 +6,7 @@ using System.Reflection.Emit;
 using System.Threading;
 using Il2CppDumper;
 using IL2CS.Generator.TypeManagement;
+using IL2CS.Runtime.Types;
 using Microsoft.Extensions.Logging;
 
 namespace IL2CS.Generator
@@ -140,7 +141,7 @@ namespace IL2CS.Generator
 			m_state = State.GenerateTypes;
 			List<TypeDescriptor> typesToBuild = FilterTypes();
 			// Start with all non-nested types, and recursively create those basic types
-			GenerateTypesRecursive(typesToBuild.Where(td => td.DeclaringParent == null));
+			GenerateTypesRecursive(typesToBuild);
 		}
 
 		private List<TypeDescriptor> FilterTypes()
@@ -170,11 +171,38 @@ namespace IL2CS.Generator
 
 		private void GenerateTypesRecursive(IEnumerable<TypeDescriptor> descriptors)
 		{
-			Queue<TypeDescriptor> queue = new(descriptors);
+			Queue<TypeDescriptor> queue = new();
+			HashSet<TypeDescriptor> queuedSet = new();
+			Queue<TypeDescriptor> reopenList = new(descriptors);
+			do
+			{
+				Queue<TypeDescriptor> openList = reopenList;
+				reopenList = new();
+				while (openList.TryDequeue(out TypeDescriptor td))
+				{
+					if (queuedSet.Contains(td))
+					{
+						throw new ApplicationException("Internal error");
+					}
+					if (td.DeclaringParent != null && !queuedSet.Contains(td.DeclaringParent))
+					{
+						reopenList.Enqueue(td);
+						continue;
+					}
+					if (td.GenericParent != null && !queuedSet.Contains(td.GenericParent))
+					{
+						reopenList.Enqueue(td);
+						continue;
+					}
+					queue.Enqueue(td);
+					queuedSet.Add(td);
+				}
+			}
+			while (reopenList.Count > 0);
+
 			while (queue.TryDequeue(out TypeDescriptor td))
 			{
-				td.NestedTypes.ForEach(queue.Enqueue);
-				BuildType(td);
+				EnsureType(td);
 			}
 		}
 
@@ -197,24 +225,29 @@ namespace IL2CS.Generator
 			{
 				throw new ApplicationException("Invalid state");
 			}
-			Type type;
 
-			try
+			if (Types.NativeMapping.TryGetValue(descriptor.Name, out Type type))
 			{
-				type = Type.GetType(descriptor.FullName);
-				if (type != null)
-				{
-					m_generatedTypes.Add(descriptor, type);
-					m_generatedTypeByFullName.Add(type.FullName, type);
-					if (!m_generatedTypeByClassName.ContainsKey(type.Name))
-					{
-						m_generatedTypeByClassName.Add(type.Name, new List<Type>());
-					}
-					m_generatedTypeByClassName[type.Name].Add(type);
-					return type;
-				}
+				RegisterType(descriptor, type);
+				return type;
 			}
-			catch { }
+			//try
+			//{
+			//	type = Type.GetType(descriptor.FullName);
+			//}
+			//catch { }
+			//if (type != null)
+			//{
+			//	m_generatedTypes.Add(descriptor, type);
+			//	m_generatedTypeByFullName.Add(type.FullName, type);
+			//	if (!m_generatedTypeByClassName.ContainsKey(type.Name))
+			//	{
+			//		m_generatedTypeByClassName.Add(type.Name, new List<Type>());
+			//	}
+			//	m_generatedTypeByClassName[type.Name].Add(type);
+			//	return type;
+			//}
+
 			if (descriptor.DeclaringParent != null)
 			{
 				TypeBuilder parentBuilder = EnsureType(descriptor.DeclaringParent) as TypeBuilder;
@@ -297,6 +330,17 @@ namespace IL2CS.Generator
 			return type;
 		}
 
+		private void RegisterType(TypeDescriptor descriptor, Type type)
+		{
+			m_generatedTypes.Add(descriptor, type);
+			m_generatedTypeByFullName.Add(type.FullName, type);
+			if (!m_generatedTypeByClassName.ContainsKey(type.Name))
+			{
+				m_generatedTypeByClassName.Add(type.Name, new List<Type>());
+			}
+			m_generatedTypeByClassName[type.Name].Add(type);
+		}
+
 		private void IndexTypeDescriptors()
 		{
 			// already indexed?
@@ -359,7 +403,11 @@ namespace IL2CS.Generator
 				else if (td.TypeDef.parentIndex >= 0 && !td.TypeDef.IsValueType && !td.TypeDef.IsEnum)
 				{
 					TypeReference baseTypeReference = MakeTypeReferenceFromCppTypeIndex(td.TypeDef.parentIndex, td);
-					if (!baseTypeReference.Name.StartsWith("System."))
+					//if (!baseTypeReference.Name.StartsWith("System."))
+					//{
+					//	td.Base = baseTypeReference;
+					//}
+					if (baseTypeReference.Name != "System.Object")
 					{
 						td.Base = baseTypeReference;
 					}
@@ -434,18 +482,18 @@ namespace IL2CS.Generator
 			{
 				return reference.Type;
 			}
-			if (reference.Name.StartsWith("System."))
-			{
-				try
-				{
-					Type t = Type.GetType(reference.Name);
-					if (t != null)
-					{
-						return t;
-					}
-				}
-				catch { }
-			}
+			//if (reference.Name.StartsWith("System."))
+			//{
+			//	try
+			//	{
+			//		Type t = Type.GetType(reference.Name);
+			//		if (t != null)
+			//		{
+			//			return t;
+			//		}
+			//	}
+			//	catch { }
+			//}
 
 			Il2CppType il2CppType = reference.CppType;
 			TypeDescriptor typeContext = reference.TypeContext;
