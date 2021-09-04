@@ -31,7 +31,7 @@ namespace IL2CS.Generator
 			ResolveEventHandler resolveHandler = new(ResolveEvent);
 			currentDomain.TypeResolve += resolveHandler;
 
-			Dictionary<State, Action> states = new Dictionary<State, Action>
+			Dictionary<State, Action> states = new()
 			{
 				{ State.IndexDescriptors, IndexTypeDescriptors },
 				{ State.GenerateTypes, GenerateTypes },
@@ -73,7 +73,7 @@ namespace IL2CS.Generator
 				}
 			}
 
-			// Complete the type.		
+			// Complete the type.
 			return m_module.Assembly;
 		}
 
