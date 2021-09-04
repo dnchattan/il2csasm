@@ -140,39 +140,44 @@ namespace IL2CS.Generator
 								continue;
 							}
 
-							byte indirection = 1;
-							while (fieldType.IsPointer)
-							{
-								++indirection;
-								fieldType = fieldType.GetElementType();
-							}
-
-							FieldBuilder fb = tb.DefineField(field.StorageName, fieldType, field.Attributes & ~(FieldAttributes.InitOnly | FieldAttributes.Public) | FieldAttributes.Private);
-							if (field.DefaultValue != null)
-							{
-								fb.SetConstant(field.DefaultValue);
-							}
-
-							fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new Type[] { typeof(int) }), new object[] { field.Offset }));
-							if (indirection > 1)
-							{
-								fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(IndirectionAttribute).GetConstructor(new Type[] { typeof(byte) }), new object[] { indirection }));
-							}
-
-							MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public, fieldType, Type.EmptyTypes);
-							ILGenerator mbil = mb.GetILGenerator();
-							mbil.Emit(OpCodes.Ldarg_0);
-							mbil.Emit(OpCodes.Call, typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance));
-							mbil.Emit(OpCodes.Ldarg_0);
-							mbil.Emit(OpCodes.Ldfld, fb);
-							mbil.Emit(OpCodes.Ret);
-
-							PropertyBuilder pb = tb.DefineProperty(field.Name, PropertyAttributes.None, fieldType, null);
-							pb.SetGetMethod(mb);
+							ProcessField(tb, field, fieldType);
 						}
 					}
 				}
 			}
+		}
+
+		private static void ProcessField(TypeBuilder tb, FieldDescriptor field, Type fieldType)
+		{
+			byte indirection = 1;
+			while (fieldType.IsPointer)
+			{
+				++indirection;
+				fieldType = fieldType.GetElementType();
+			}
+
+			FieldBuilder fb = tb.DefineField(field.StorageName, fieldType, field.Attributes & ~(FieldAttributes.InitOnly | FieldAttributes.Public) | FieldAttributes.Private);
+			if (field.DefaultValue != null)
+			{
+				fb.SetConstant(field.DefaultValue);
+			}
+
+			fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new Type[] { typeof(int) }), new object[] { field.Offset }));
+			if (indirection > 1)
+			{
+				fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(IndirectionAttribute).GetConstructor(new Type[] { typeof(byte) }), new object[] { indirection }));
+			}
+
+			MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public, fieldType, Type.EmptyTypes);
+			ILGenerator mbil = mb.GetILGenerator();
+			mbil.Emit(OpCodes.Ldarg_0);
+			mbil.Emit(OpCodes.Call, typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance));
+			mbil.Emit(OpCodes.Ldarg_0);
+			mbil.Emit(OpCodes.Ldfld, fb);
+			mbil.Emit(OpCodes.Ret);
+
+			PropertyBuilder pb = tb.DefineProperty(field.Name, PropertyAttributes.None, fieldType, null);
+			pb.SetGetMethod(mb);
 		}
 
 		private void GenerateTypes()
