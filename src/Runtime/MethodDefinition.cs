@@ -7,6 +7,9 @@ namespace IL2CS.Runtime
 	{
 		[Offset(24)]
 		[Indirection(2)]
-		public ClassDefinition klass;
+		private ClassDefinition _klass;
+
+		public ClassDefinition klass { get { Load(); return _klass; } }
+
 	}
 }

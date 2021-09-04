@@ -39,7 +39,7 @@ namespace IL2CS.Runtime
 		public T ReadStruct<T>(long address) where T : StructBase, new()
 		{
 			T result = new T();
-			result.Load(this, address);
+			result.Init(this, address);
 			return result;
 		}
 

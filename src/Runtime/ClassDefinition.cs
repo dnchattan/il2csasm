@@ -6,13 +6,18 @@ namespace IL2CS.Runtime
 	public class ClassDefinition : StructBase
 	{
 		[Offset(16)]
-		public string Name;
+		private string _Name;
+		public string Name { get { Load(); return _Name; } }
+
 
 		[Offset(24)]
-		public string Namespace;
+		private string _Namespace;
+		public string Namespace { get { Load(); return _Namespace; } }
 
 		[Offset(184)]
 		[Indirection(2)]
-		public UnknownClass StaticFields;
+		private UnknownClass _StaticFields;
+		public UnknownClass StaticFields { get { Load(); return _StaticFields; } }
+
 	}
 }

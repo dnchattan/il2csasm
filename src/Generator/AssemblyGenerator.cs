@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
 using Il2CppDumper;
+using IL2CS.Core;
 using IL2CS.Generator.TypeManagement;
 using IL2CS.Runtime;
 using IL2CS.Runtime.Types;
@@ -49,7 +50,7 @@ namespace IL2CS.Generator
 		private static readonly Stack<Type> s_resolutionStack = new();
 		public Assembly ResolveEvent(object _, ResolveEventArgs args)
 		{
-			using var scope = m_logger.BeginScope($"Resolve({args.Name})");
+			using IDisposable scope = m_logger.BeginScope($"Resolve({args.Name})");
 
 			if (s_resolutionStack.Count > 0 && m_generatedTypeByFullName.TryGetValue($"{s_resolutionStack.Peek().FullName}+{args.Name}", out Type type))
 			{
@@ -60,7 +61,7 @@ namespace IL2CS.Generator
 			{
 				ResolveType(type);
 				return type.Assembly;
-			} 
+			}
 			else
 			{
 				if (m_generatedTypeByClassName.TryGetValue(args.Name, out List<Type> types))
@@ -126,21 +127,48 @@ namespace IL2CS.Generator
 					{
 						foreach (FieldDescriptor field in td.Fields)
 						{
+							if (field.Attributes.HasFlag(FieldAttributes.Static))
+							{
+								// TODO
+								continue;
+							}
+
 							Type fieldType = ResolveTypeReference(field.Type);
 							if (fieldType == null)
 							{
 								m_logger.LogWarning($"Dropping field '{field.Name}' from '{tb.Name}'. Reason: unknown type");
 								continue;
 							}
-							FieldAttributes attribs = field.Attributes;
-							attribs &= ~FieldAttributes.Private;
-							attribs |= FieldAttributes.Public;
-							FieldBuilder fb = tb.DefineField(field.StorageName, fieldType, attribs);
+
+							byte indirection = 1;
+							while (fieldType.IsPointer)
+							{
+								++indirection;
+								fieldType = fieldType.GetElementType();
+							}
+
+							FieldBuilder fb = tb.DefineField(field.StorageName, fieldType, field.Attributes & ~(FieldAttributes.InitOnly | FieldAttributes.Public) | FieldAttributes.Private);
 							if (field.DefaultValue != null)
 							{
 								fb.SetConstant(field.DefaultValue);
 							}
-							// TODO: Field Attributes
+
+							fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new Type[] { typeof(int) }), new object[] { field.Offset }));
+							if (indirection > 1)
+							{
+								fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(IndirectionAttribute).GetConstructor(new Type[] { typeof(byte) }), new object[] { indirection }));
+							}
+
+							MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public, fieldType, Type.EmptyTypes);
+							ILGenerator mbil = mb.GetILGenerator();
+							mbil.Emit(OpCodes.Ldarg_0);
+							mbil.Emit(OpCodes.Call, typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance));
+							mbil.Emit(OpCodes.Ldarg_0);
+							mbil.Emit(OpCodes.Ldfld, fb);
+							mbil.Emit(OpCodes.Ret);
+
+							PropertyBuilder pb = tb.DefineProperty(field.Name, PropertyAttributes.None, fieldType, null);
+							pb.SetGetMethod(mb);
 						}
 					}
 				}
@@ -282,7 +310,7 @@ namespace IL2CS.Generator
 				}
 				else
 				{
-					type = parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.TypeDef.IsValueType ? typeof(ValueType) : null);
+					type = parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type);
 					m_generatedTypes.Add(descriptor, type);
 				}
 			}
@@ -306,7 +334,7 @@ namespace IL2CS.Generator
 				}
 				else
 				{
-					type = m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.TypeDef.IsValueType ? typeof(ValueType) : null);
+					type = m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type);
 					m_generatedTypes.Add(descriptor, type);
 				}
 			}
@@ -431,6 +459,12 @@ namespace IL2CS.Generator
 					}
 				}
 
+				// default to ValueType or StructBase
+				if (td.Base == null && !attribs.HasFlag(TypeAttributes.Interface))
+				{
+					td.Base = new TypeReference(td.TypeDef.IsValueType ? typeof(ValueType) : typeof(StructBase));
+				}
+
 				// interfaces
 				foreach (int interfaceTypeIndex in EnumerateMetadata(td.TypeDef.interfacesStart, td.TypeDef.interfaces_count, m_context.Metadata.interfaceIndices))
 				{
@@ -447,7 +481,8 @@ namespace IL2CS.Generator
 						TypeReference fieldType = MakeTypeReferenceFromCppTypeIndex(fieldDef.typeIndex, td);
 						string fieldName = m_context.Metadata.GetStringFromIndex(fieldDef.nameIndex);
 						FieldAttributes attrs = (FieldAttributes)fieldCppType.attrs & ~FieldAttributes.InitOnly;
-						FieldDescriptor fieldDescriptor = new(fieldName, fieldType, attrs);
+						int offset = m_context.Il2Cpp.GetFieldOffsetFromIndex(td.TypeIndex, fieldIndex - td.TypeDef.fieldStart, fieldIndex, td.TypeDef.IsValueType, attrs.HasFlag(FieldAttributes.Static));
+						FieldDescriptor fieldDescriptor = new(fieldName, fieldType, attrs, offset);
 						if (m_context.Metadata.GetFieldDefaultValueFromIndex(fieldIndex, out Il2CppFieldDefaultValue fieldDefaultValue) && fieldDefaultValue.dataIndex != -1)
 						{
 							if (TryGetDefaultValue(fieldDefaultValue.typeIndex, fieldDefaultValue.dataIndex, out object value))

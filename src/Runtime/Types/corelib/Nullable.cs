@@ -36,7 +36,7 @@ namespace IL2CS.Runtime.Types.corelib
 		private bool m_hasValue = false;
 
 		public T Value => m_value;
-		public bool HasValuie => m_hasValue;
+		public bool HasValue => m_hasValue;
 
 		protected override void ReadFields()
 		{
@@ -69,7 +69,7 @@ namespace IL2CS.Runtime.Types.corelib
 			if (valueType.IsAssignableTo(typeof(StructBase)))
 			{
 				StructBase result = (StructBase)Activator.CreateInstance(valueType);
-				result.Load(Context, valueOffset);
+				result.Init(Context, valueOffset);
 				field.SetValue(this, result);
 			}
 			else

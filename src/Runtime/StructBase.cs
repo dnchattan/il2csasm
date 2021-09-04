@@ -8,6 +8,8 @@ namespace IL2CS.Runtime
 {
 	public abstract class StructBase
 	{
+		private bool m_isLoaded = false;
+
 		public Il2CsRuntimeContext Context { get; set; }
 		public long Address { get; set; }
 		public bool Static { get; set; }
@@ -22,19 +24,28 @@ namespace IL2CS.Runtime
 			}
 		}
 
-		public void Load(Il2CsRuntimeContext context, long address)
+		public void Init(Il2CsRuntimeContext context, long address)
 		{
 			Context = context;
 			Address = address;
 			Static = GetType().GetCustomAttribute<StaticAttribute>(inherit: true) != null;
+		}
+
+		protected void Load()
+		{
+			if (m_isLoaded)
+			{
+				return;
+			}
 			EnsureCache();
 			ReadFields();
+			m_isLoaded = true;
 		}
 
 		public T As<T>() where T : StructBase,new()
 		{
 			T cast = new();
-			cast.Load(Context, Address);
+			cast.Init(Context, Address);
 			return cast;
 		}
 
@@ -72,7 +83,7 @@ namespace IL2CS.Runtime
 			if (field.FieldType.IsAssignableTo(typeof(StructBase)))
 			{
 				StructBase result = (StructBase)Activator.CreateInstance(field.FieldType);
-				result.Load(Context, offset);
+				result.Init(Context, offset);
 				field.SetValue(this, result);
 			}
 			else if (field.FieldType.IsPrimitive)
