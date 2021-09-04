@@ -179,7 +179,6 @@ namespace IL2CS.Generator
 		{
 			m_state = State.GenerateTypes;
 			List<TypeDescriptor> typesToBuild = FilterTypes();
-			// Start with all non-nested types, and recursively create those basic types
 			GenerateTypesRecursive(typesToBuild);
 		}
 
@@ -270,22 +269,6 @@ namespace IL2CS.Generator
 				RegisterType(descriptor, type);
 				return type;
 			}
-			//try
-			//{
-			//	type = Type.GetType(descriptor.FullName);
-			//}
-			//catch { }
-			//if (type != null)
-			//{
-			//	m_generatedTypes.Add(descriptor, type);
-			//	m_generatedTypeByFullName.Add(type.FullName, type);
-			//	if (!m_generatedTypeByClassName.ContainsKey(type.Name))
-			//	{
-			//		m_generatedTypeByClassName.Add(type.Name, new List<Type>());
-			//	}
-			//	m_generatedTypeByClassName[type.Name].Add(type);
-			//	return type;
-			//}
 
 			if (descriptor.DeclaringParent != null)
 			{
@@ -320,7 +303,6 @@ namespace IL2CS.Generator
 				{
 					// NB: first field is always 'value__'
 					TypeBuilder eb = m_module.DefineType(descriptor.Name, descriptor.Attributes, typeof(Enum), null);
-					//EnumBuilder eb = m_module.DefineEnum(descriptor.Name, descriptor.Attributes & TypeAttributes.VisibilityMask, ResolveTypeReference(descriptor.Fields[0].Type));
 					m_generatedTypes.Add(descriptor, eb);
 					foreach (FieldDescriptor field in descriptor.Fields)
 					{
@@ -449,13 +431,16 @@ namespace IL2CS.Generator
 				else if (td.TypeDef.parentIndex >= 0 && !td.TypeDef.IsValueType && !td.TypeDef.IsEnum)
 				{
 					TypeReference baseTypeReference = MakeTypeReferenceFromCppTypeIndex(td.TypeDef.parentIndex, td);
-					//if (!baseTypeReference.Name.StartsWith("System."))
-					//{
-					//	td.Base = baseTypeReference;
-					//}
 					if (baseTypeReference.Name != "System.Object")
 					{
-						td.Base = baseTypeReference;
+						if (Types.TryGetType(baseTypeReference.Name, out Type builtInType))
+						{
+							td.Base = new TypeReference(builtInType);
+						}
+						else
+						{
+							td.Base = baseTypeReference;
+						}
 					}
 				}
 
