@@ -10,7 +10,7 @@ namespace IL2CS.Generator
 		public LoggingScope()
 		{
 			Factory = LoggerFactory.Create(builder => builder
-				.AddFilter("generator", LogLevel.Trace)
+				.AddFilter((_) => true)
 				.AddSimpleConsole(options =>
 				{
 					options.IncludeScopes = true;

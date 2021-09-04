@@ -45,7 +45,10 @@ namespace IL2CS.Generator.Cli
 						{
 							//td => o.IncludeTypes == null || o.IncludeTypes.Contains(td.Name),
 							//td => td.Name.StartsWith("System.Collections")
-							td => td.Name == "Plarium.GS.Model.Modules.GlobalRatings.Entities.GlobalRatingStatusIds"
+							//td => td.Name == "Plarium.GS.Model.Modules.GlobalRatings.Entities.GlobalRatingStatusIds"
+							td => td.Name == "Client.Model.AppModel"
+							//td => td.Name == "Client.App.Configuration.BuildConfiguration",
+							//td => td.Name == "Client.Model.Settings.ConfigManager"
 						}
 					});
 					asm.Generate(o.OutputPath);

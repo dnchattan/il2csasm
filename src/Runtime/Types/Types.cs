@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -9,9 +10,24 @@ namespace IL2CS.Runtime.Types
 {
 	public static class Types
 	{
-		public static readonly Dictionary<string, Type> NativeMapping = new();
+		public static bool TryGetType(string typeName, out Type mappedType)
+		{
+			if (NativeMapping.TryGetValue(typeName, out mappedType))
+			{
+				return true;
+			}
+			if (typeName.StartsWith("System."))
+			{
+				Trace.WriteLine($"Omitting type '{typeName}'");
+				mappedType = null;
+				return true;
+			}
+			return false;
+		}
+		private static readonly Dictionary<string, Type> NativeMapping = new();
 		static Types()
 		{
+			NativeMapping.Add(typeof(ValueType).FullName, typeof(ValueType));
 			foreach (var (mapFrom, mapTo) in GetTypesWithHelpAttribute(typeof(Types).Assembly))
 			{
 				NativeMapping.Add(mapFrom.FullName, mapTo);

@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace IL2CS.Runtime.Types.corelib
 {
@@ -23,16 +19,20 @@ namespace IL2CS.Runtime.Types.corelib
 					return (uint)size;
 				}
 
-				// TODO: Check if there are other cases we don't know about
+				if (!typeof(T).IsAssignableTo(typeof(StructBase)))
+				{
+					// TODO: Catch if there are other cases we didn't anticipate
+					throw new NotSupportedException("Unexpected type === unknown size");
+				}
 				return 8;
 			}
 		}
 
 		protected override uint? Native__ObjectSize => Native__ValueSize + 1;
 
-#pragma warning disable IDE0044 // Add readonly modifier
+#pragma warning disable IDE0044, IDE0032, 0649 // Add readonly modifier
 		private T m_value;
-#pragma warning restore IDE0044 // Add readonly modifier
+#pragma warning restore IDE0044, IDE0032, 0649 // Add readonly modifier
 		private bool m_hasValue = false;
 
 		public T Value => m_value;

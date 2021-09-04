@@ -80,7 +80,7 @@ namespace IL2CS.Generator
 				attrs |= TypeAttributes.NotPublic;
 			else if ((typeDef.flags & TYPE_ATTRIBUTE_INTERFACE) == 0 && (typeDef.flags & TYPE_ATTRIBUTE_ABSTRACT) != 0)
 				attrs |= TypeAttributes.Abstract;
-			else if (!typeDef.IsValueType && !typeDef.IsEnum && (typeDef.flags & TYPE_ATTRIBUTE_SEALED) != 0)
+			else if ((typeDef.flags & TYPE_ATTRIBUTE_SEALED) != 0)
 				attrs |= TypeAttributes.Sealed;
 			if ((typeDef.flags & TYPE_ATTRIBUTE_INTERFACE) != 0)
 				attrs |= TypeAttributes.Interface | TypeAttributes.Abstract;

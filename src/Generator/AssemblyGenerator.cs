@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
 using Il2CppDumper;
 using IL2CS.Generator.TypeManagement;
+using IL2CS.Runtime;
 using IL2CS.Runtime.Types;
 using Microsoft.Extensions.Logging;
 
@@ -25,6 +27,10 @@ namespace IL2CS.Generator
 
 		public void Generate(string outputPath)
 		{
+			AppDomain currentDomain = Thread.GetDomain();
+			ResolveEventHandler resolveHandler = new(ResolveEvent);
+			currentDomain.TypeResolve += resolveHandler;
+
 			Dictionary<State, Action> states = new Dictionary<State, Action>
 			{
 				{ State.IndexDescriptors, IndexTypeDescriptors },
@@ -38,8 +44,6 @@ namespace IL2CS.Generator
 				m_state = state;
 				action();
 			}
-
-			GenerateAssembly(outputPath);
 		}
 
 		private static readonly Stack<Type> s_resolutionStack = new();
@@ -50,10 +54,12 @@ namespace IL2CS.Generator
 			if (s_resolutionStack.Count > 0 && m_generatedTypeByFullName.TryGetValue($"{s_resolutionStack.Peek().FullName}+{args.Name}", out Type type))
 			{
 				ResolveType(type);
+				return type.Assembly;
 			}
 			else if (m_generatedTypeByFullName.TryGetValue(args.Name, out type))
 			{
 				ResolveType(type);
+				return type.Assembly;
 			} 
 			else
 			{
@@ -96,10 +102,6 @@ namespace IL2CS.Generator
 
 		private void GenerateAssembly(string outputPath)
 		{
-			AppDomain currentDomain = Thread.GetDomain();
-			ResolveEventHandler resolveHandler = new(ResolveEvent);
-			currentDomain.TypeResolve += resolveHandler;
-
 			Lokad.ILPack.AssemblyGenerator generator = new();
 			string outputFile = outputPath;
 			if (System.IO.Path.GetExtension(outputFile) != ".dll")
@@ -124,7 +126,16 @@ namespace IL2CS.Generator
 					{
 						foreach (FieldDescriptor field in td.Fields)
 						{
-							FieldBuilder fb = tb.DefineField(field.StorageName, ResolveTypeReference(field.Type), field.Attributes);
+							Type fieldType = ResolveTypeReference(field.Type);
+							if (fieldType == null)
+							{
+								m_logger.LogWarning($"Dropping field '{field.Name}' from '{tb.Name}'. Reason: unknown type");
+								continue;
+							}
+							FieldAttributes attribs = field.Attributes;
+							attribs &= ~FieldAttributes.Private;
+							attribs |= FieldAttributes.Public;
+							FieldBuilder fb = tb.DefineField(field.StorageName, fieldType, attribs);
 							if (field.DefaultValue != null)
 							{
 								fb.SetConstant(field.DefaultValue);
@@ -226,7 +237,7 @@ namespace IL2CS.Generator
 				throw new ApplicationException("Invalid state");
 			}
 
-			if (Types.NativeMapping.TryGetValue(descriptor.Name, out Type type))
+			if (Types.TryGetType(descriptor.Name, out Type type))
 			{
 				RegisterType(descriptor, type);
 				return type;
@@ -271,7 +282,7 @@ namespace IL2CS.Generator
 				}
 				else
 				{
-					type = parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes);
+					type = parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.TypeDef.IsValueType ? typeof(ValueType) : null);
 					m_generatedTypes.Add(descriptor, type);
 				}
 			}
@@ -285,7 +296,7 @@ namespace IL2CS.Generator
 					m_generatedTypes.Add(descriptor, eb);
 					foreach (FieldDescriptor field in descriptor.Fields)
 					{
-						FieldBuilder fb = eb.DefineField(field.StorageName, ResolveTypeReference(field.Type), field.Attributes);
+						FieldBuilder fb = eb.DefineField(field.Name, ResolveTypeReference(field.Type), field.Attributes);
 						if (field.DefaultValue != null)
 						{
 							fb.SetConstant(field.DefaultValue);
@@ -295,7 +306,7 @@ namespace IL2CS.Generator
 				}
 				else
 				{
-					type = m_module.DefineType(descriptor.Name, descriptor.Attributes);
+					type = m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.TypeDef.IsValueType ? typeof(ValueType) : null);
 					m_generatedTypes.Add(descriptor, type);
 				}
 			}
@@ -322,10 +333,13 @@ namespace IL2CS.Generator
 			}
 
 			// visit members, don't create them.
-			ResolveTypeReference(descriptor.Base);
-			descriptor.Fields.ForEach(field => ResolveTypeReference(field.Type));
-			EnsureType(descriptor.GenericParent);
-			descriptor.Implements.ForEach(iface => ResolveTypeReference(iface));
+			if (!descriptor.TypeDef.IsEnum)
+			{
+				ResolveTypeReference(descriptor.Base);
+				descriptor.Fields.ForEach(field => ResolveTypeReference(field.Type));
+				EnsureType(descriptor.GenericParent);
+				descriptor.Implements.ForEach(iface => ResolveTypeReference(iface));
+			}
 
 			return type;
 		}
@@ -333,12 +347,16 @@ namespace IL2CS.Generator
 		private void RegisterType(TypeDescriptor descriptor, Type type)
 		{
 			m_generatedTypes.Add(descriptor, type);
-			m_generatedTypeByFullName.Add(type.FullName, type);
-			if (!m_generatedTypeByClassName.ContainsKey(type.Name))
+			if (type != null && descriptor.Name != type.Name && !type.IsAssignableTo(typeof(StructBase)))
 			{
-				m_generatedTypeByClassName.Add(type.Name, new List<Type>());
+				Debugger.Break();
 			}
-			m_generatedTypeByClassName[type.Name].Add(type);
+			m_generatedTypeByFullName.Add(descriptor.Name, type);
+			if (!m_generatedTypeByClassName.ContainsKey(descriptor.Name))
+			{
+				m_generatedTypeByClassName.Add(descriptor.Name, new List<Type>());
+			}
+			m_generatedTypeByClassName[descriptor.Name].Add(type);
 		}
 
 		private void IndexTypeDescriptors()
@@ -412,10 +430,6 @@ namespace IL2CS.Generator
 						td.Base = baseTypeReference;
 					}
 				}
-				else if(td.TypeDef.IsValueType)
-				{
-					td.Base = new TypeReference(typeof(ValueType));
-				}
 
 				// interfaces
 				foreach (int interfaceTypeIndex in EnumerateMetadata(td.TypeDef.interfacesStart, td.TypeDef.interfaces_count, m_context.Metadata.interfaceIndices))
@@ -482,18 +496,6 @@ namespace IL2CS.Generator
 			{
 				return reference.Type;
 			}
-			//if (reference.Name.StartsWith("System."))
-			//{
-			//	try
-			//	{
-			//		Type t = Type.GetType(reference.Name);
-			//		if (t != null)
-			//		{
-			//			return t;
-			//		}
-			//	}
-			//	catch { }
-			//}
 
 			Il2CppType il2CppType = reference.CppType;
 			TypeDescriptor typeContext = reference.TypeContext;
@@ -502,6 +504,7 @@ namespace IL2CS.Generator
 
 		private Type ResolveTypeReference(Il2CppType il2CppType, TypeDescriptor typeContext)
 		{
+			string typeName = m_context.Executor.GetTypeName(il2CppType, true, false);
 			switch (il2CppType.type)
 			{
 				case Il2CppTypeEnum.IL2CPP_TYPE_ARRAY:
@@ -509,19 +512,19 @@ namespace IL2CS.Generator
 						Il2CppArrayType arrayType = m_context.Il2Cpp.MapVATR<Il2CppArrayType>(il2CppType.data.array);
 						Il2CppType elementCppType = m_context.Il2Cpp.GetIl2CppType(arrayType.etype);
 						Type elementType = ResolveTypeReference(elementCppType, typeContext);
-						return elementType.MakeArrayType(arrayType.rank);
+						return elementType?.MakeArrayType(arrayType.rank);
 					}
 				case Il2CppTypeEnum.IL2CPP_TYPE_SZARRAY:
 					{
 						Il2CppType elementCppType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
 						Type elementType = ResolveTypeReference(elementCppType, typeContext);
-						return elementType.MakeArrayType();
+						return elementType?.MakeArrayType();
 					}
 				case Il2CppTypeEnum.IL2CPP_TYPE_PTR:
 					{
 						Il2CppType oriType = m_context.Il2Cpp.GetIl2CppType(il2CppType.data.type);
 						Type ptrToType = ResolveTypeReference(oriType, typeContext);
-						return ptrToType.MakePointerType();
+						return ptrToType?.MakePointerType();
 					}
 				case Il2CppTypeEnum.IL2CPP_TYPE_VAR:
 				case Il2CppTypeEnum.IL2CPP_TYPE_MVAR:
@@ -529,7 +532,7 @@ namespace IL2CS.Generator
 						// TODO: Is this even remotely correct? :S
 						Il2CppGenericParameter param = m_context.Executor.GetGenericParameteFromIl2CppType(il2CppType);
 						Type type = m_generatedTypes[typeContext];
-						return (type as TypeInfo).GenericTypeParameters[param.num];
+						return (type as TypeInfo)?.GenericTypeParameters[param.num];
 					}
 				case Il2CppTypeEnum.IL2CPP_TYPE_CLASS:
 				case Il2CppTypeEnum.IL2CPP_TYPE_VALUETYPE:
@@ -548,11 +551,17 @@ namespace IL2CS.Generator
 						for (int i = 0; i < genericInst.type_argc; i++)
 						{
 							Il2CppType paramCppType = m_context.Il2Cpp.GetIl2CppType(pointers[i]);
-							genericParameterTypes.Add(ResolveTypeReference(paramCppType, typeContext));
+							Type ptype = ResolveTypeReference(paramCppType, typeContext);
+							if (ptype == null)
+							{
+								m_logger.LogWarning($"Dropping '{typeName}'. Reason: incomplete generic type");
+								return null;
+							}
+							genericParameterTypes.Add(ptype);
 						}
 
 						int typeDefIndex = Array.IndexOf(m_context.Metadata.typeDefs, genericTypeDef);
-						return EnsureType(m_typeCache[typeDefIndex]).MakeGenericType(genericParameterTypes.ToArray());
+						return EnsureType(m_typeCache[typeDefIndex])?.MakeGenericType(genericParameterTypes.ToArray());
 					}
 				default:
 					return TypeMap[(int)il2CppType.type];
