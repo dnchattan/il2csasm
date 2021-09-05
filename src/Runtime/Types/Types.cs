@@ -28,12 +28,12 @@ namespace IL2CS.Runtime.Types
 		static Types()
 		{
 			NativeMapping.Add(typeof(ValueType).FullName, typeof(ValueType));
-			foreach (var (mapFrom, mapTo) in GetTypesWithHelpAttribute(typeof(Types).Assembly))
+			foreach (var (mapFrom, mapTo) in GetTypesWithMappingAttribute(typeof(Types).Assembly))
 			{
 				NativeMapping.Add(mapFrom.FullName, mapTo);
 			}
 		}
-		static IEnumerable<(Type, Type)> GetTypesWithHelpAttribute(Assembly assembly)
+		static IEnumerable<(Type, Type)> GetTypesWithMappingAttribute(Assembly assembly)
 		{
 			foreach (Type type in assembly.GetTypes())
 			{
