@@ -56,6 +56,7 @@ namespace IL2CS.Generator.TypeManagement
 		public TypeAttributes Attributes;
 		public string[] GenericParameterNames = Array.Empty<string>();
 		public readonly List<FieldDescriptor> Fields = new();
+		public readonly List<MethodDescriptor> Methods = new();
 
 		private string DebuggerDisplay => string.Join(" : ", Name, Base?.Name).TrimEnd(new char[] { ' ', ':' });
 	}

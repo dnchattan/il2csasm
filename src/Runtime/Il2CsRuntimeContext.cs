@@ -12,7 +12,7 @@ namespace IL2CS.Runtime
 	public class Il2CsRuntimeContext
 	{
 		private readonly Dictionary<string, long> moduleAddresses = new();
-		private readonly ReadProcessMemoryCache rpmCache = new ReadProcessMemoryCache();
+		private readonly ReadProcessMemoryCache rpmCache = new();
 		private readonly IntPtr processHandle;
 		public Process TargetProcess { get; private set; }
 		public Il2CsRuntimeContext(Process target)

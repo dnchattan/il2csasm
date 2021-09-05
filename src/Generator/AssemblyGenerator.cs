@@ -433,14 +433,18 @@ namespace IL2CS.Generator
 				{
 					td.Base = new TypeReference(typeof(Enum));
 				}
-				else if (td.TypeDef.parentIndex >= 0 && !td.TypeDef.IsValueType && !td.TypeDef.IsEnum)
+				else if (td.TypeDef.parentIndex >= 0)
 				{
 					TypeReference baseTypeReference = MakeTypeReferenceFromCppTypeIndex(td.TypeDef.parentIndex, td);
 					if (baseTypeReference.Name != "System.Object")
 					{
 						if (Types.TryGetType(baseTypeReference.Name, out Type builtInType))
 						{
-							td.Base = new TypeReference(builtInType);
+							if (builtInType != null)
+							{
+								// TODO: Omit this type entirely, rather than just its base
+								td.Base = new TypeReference(builtInType);
+							}
 						}
 						else
 						{
@@ -448,11 +452,10 @@ namespace IL2CS.Generator
 						}
 					}
 				}
-
-				// default to ValueType or StructBase
-				if (td.Base == null && !attribs.HasFlag(TypeAttributes.Interface))
+				else
 				{
-					td.Base = new TypeReference(td.TypeDef.IsValueType ? typeof(ValueType) : typeof(StructBase));
+					Helpers.Assert(!td.TypeDef.IsValueType, "Unexpected value type");
+					td.Base = new TypeReference(typeof(StructBase));
 				}
 
 				// interfaces
@@ -483,6 +486,40 @@ namespace IL2CS.Generator
 						td.Fields.Add(fieldDescriptor);
 					}
 				}
+
+				// methods
+				foreach (int methodIndex in Enumerable.Range(td.TypeDef.methodStart, td.TypeDef.method_count))
+				{
+					Il2CppMethodDefinition methodDef = m_context.Metadata.methodDefs[methodIndex];
+					string methodName = m_context.Metadata.GetStringFromIndex(methodDef.nameIndex);
+
+					// generic instance method arguments
+					if (m_context.Il2Cpp.methodDefinitionMethodSpecs.TryGetValue(methodIndex, out var methodSpecs))
+					{
+						foreach (var methodSpec in methodSpecs)
+						{
+							if (methodSpec.classIndexIndex != -1)
+							{
+								var classInst = m_context.Il2Cpp.genericInsts[methodSpec.classIndexIndex];
+								var pointers = m_context.Il2Cpp.MapVATR<ulong>(classInst.type_argv, classInst.type_argc);
+
+								MethodDescriptor md = new(methodName);
+								for (int i = 0; i < classInst.type_argc; i++)
+								{
+									var il2CppType = m_context.Il2Cpp.GetIl2CppType(pointers[i]);
+									string typeName = m_context.Executor.GetTypeName(il2CppType, true, false);
+									md.DeclaringTypeArgs.Add(new TypeReference(typeName, il2CppType, td));
+								}
+								td.Methods.Add(md);
+							}
+						}
+					}
+					else
+					{
+						MethodDescriptor md = new(methodName);
+						td.Methods.Add(md);
+					}
+				}
 			}
 		}
 
@@ -495,6 +532,14 @@ namespace IL2CS.Generator
 
 		private TypeDescriptor MakeTypeDescriptor(Il2CppTypeDefinition typeDef, int typeIndex)
 		{
+			string typeName = GetTypeDefName(typeDef);
+			TypeDescriptor td = new(typeName, typeDef, typeIndex);
+			m_typeCache.Add(typeIndex, td);
+			return td;
+		}
+
+		private string GetTypeDefName(Il2CppTypeDefinition typeDef)
+		{
 			string typeName = m_context.Metadata.GetStringFromIndex(typeDef.nameIndex);
 			int index = typeName.IndexOf("`");
 			if (index != -1)
@@ -506,9 +551,8 @@ namespace IL2CS.Generator
 			{
 				typeName = ns + "." + typeName;
 			}
-			TypeDescriptor td = new(typeName, typeDef, typeIndex);
-			m_typeCache.Add(typeIndex, td);
-			return td;
+
+			return typeName;
 		}
 
 		private Type ResolveTypeReference(TypeReference reference)

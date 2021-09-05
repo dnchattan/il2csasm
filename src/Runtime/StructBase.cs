@@ -108,7 +108,7 @@ namespace IL2CS.Runtime
 				long address = addressAttr.Address;
 				if (!string.IsNullOrEmpty(addressAttr.RelativeToModule))
 				{
-					address = address + Context.GetModuleAddress(addressAttr.RelativeToModule);
+					address += Context.GetModuleAddress(addressAttr.RelativeToModule);
 				}
 				return address;
 			}
