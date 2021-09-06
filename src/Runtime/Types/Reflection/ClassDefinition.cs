@@ -1,4 +1,5 @@
 ﻿using IL2CS.Core;
+using IL2CS.Runtime.Types.corelib;
 
 namespace IL2CS.Runtime
 {
@@ -11,16 +12,16 @@ namespace IL2CS.Runtime
 
 		[Offset(16)]
 #pragma warning disable 649
-		private string _name;
+		private Native__LPSTR _Name;
 #pragma warning restore 649
-		public string Name { get { Load(); return _name; } }
+		public string Name { get { Load(); return _Name.Value; } }
 
 
 		[Offset(24)]
 #pragma warning disable 649
-		private string _Namespace;
+		private Native__LPSTR _Namespace;
 #pragma warning restore 649
-		public string Namespace { get { Load(); return _Namespace; } }
+		public string Namespace { get { Load(); return _Namespace.Value; } }
 
 		[Offset(184)]
 		[Indirection(2)]

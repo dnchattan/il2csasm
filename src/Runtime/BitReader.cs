@@ -8,32 +8,29 @@ namespace IL2CS.Runtime
 {
 	public static class BitReader
 	{
-		private static class BitReaderImpl<T>
-		{
-			public static Func<Il2CsRuntimeContext, long, T> Read;
-		}
+		private static readonly Dictionary<Type, Func<Il2CsRuntimeContext, long, object>> s_impl = new ();
 		static BitReader()
 		{
 			// ReSharper disable BuiltInTypeReferenceStyle
-			BitReaderImpl<Char>.Read = (context, address) => BitConverter.ToChar(context.ReadMemory(address, sizeof(Char)).Span);
-			BitReaderImpl<Boolean>.Read = (context, address) => BitConverter.ToBoolean(context.ReadMemory(address, sizeof(Boolean)).Span);
-			BitReaderImpl<Double>.Read = (context, address) => BitConverter.ToDouble(context.ReadMemory(address, sizeof(Double)).Span);
-			BitReaderImpl<Single>.Read = (context, address) => BitConverter.ToSingle(context.ReadMemory(address, sizeof(Single)).Span);
-			BitReaderImpl<Int16>.Read = (context, address) => BitConverter.ToInt16(context.ReadMemory(address, sizeof(Int16)).Span);
-			BitReaderImpl<Int32>.Read = (context, address) => BitConverter.ToInt32(context.ReadMemory(address, sizeof(Int32)).Span);
-			BitReaderImpl<Int64>.Read = (context, address) => BitConverter.ToInt64(context.ReadMemory(address, sizeof(Int64)).Span);
-			BitReaderImpl<UInt16>.Read = (context, address) => BitConverter.ToUInt16(context.ReadMemory(address, sizeof(UInt16)).Span);
-			BitReaderImpl<UInt32>.Read = (context, address) => BitConverter.ToUInt32(context.ReadMemory(address, sizeof(UInt32)).Span);
-			BitReaderImpl<UInt64>.Read = (context, address) => BitConverter.ToUInt64(context.ReadMemory(address, sizeof(UInt64)).Span);
+			s_impl.Add(typeof(Char), (context, address) => BitConverter.ToChar(context.ReadMemory(address, sizeof(Char)).Span));
+			s_impl.Add(typeof(Boolean), (context, address) => BitConverter.ToBoolean(context.ReadMemory(address, sizeof(Boolean)).Span));
+			s_impl.Add(typeof(Double), (context, address) => BitConverter.ToDouble(context.ReadMemory(address, sizeof(Double)).Span));
+			s_impl.Add(typeof(Single), (context, address) => BitConverter.ToSingle(context.ReadMemory(address, sizeof(Single)).Span));
+			s_impl.Add(typeof(Int16), (context, address) => BitConverter.ToInt16(context.ReadMemory(address, sizeof(Int16)).Span));
+			s_impl.Add(typeof(Int32), (context, address) => BitConverter.ToInt32(context.ReadMemory(address, sizeof(Int32)).Span));
+			s_impl.Add(typeof(Int64), (context, address) => BitConverter.ToInt64(context.ReadMemory(address, sizeof(Int64)).Span));
+			s_impl.Add(typeof(UInt16), (context, address) => BitConverter.ToUInt16(context.ReadMemory(address, sizeof(UInt16)).Span));
+			s_impl.Add(typeof(UInt32), (context, address) => BitConverter.ToUInt32(context.ReadMemory(address, sizeof(UInt32)).Span));
+			s_impl.Add(typeof(UInt64), (context, address) => BitConverter.ToUInt64(context.ReadMemory(address, sizeof(UInt64)).Span));
 			// ReSharper restore BuiltInTypeReferenceStyle
 		}
-		public static T ReadPrimitive<T>(this Il2CsRuntimeContext context, long address)
+		public static object ReadPrimitive(this Il2CsRuntimeContext context, Type type, long address)
 		{
-			if (BitReaderImpl<T>.Read != null)
+			if (s_impl.TryGetValue(type, out Func<Il2CsRuntimeContext, long, object> fn))
 			{
-				return BitReaderImpl<T>.Read(context, address);
+				return fn(context, address);
 			}
-			throw new ArgumentException($"Type '{typeof(T).FullName}' is not a valid primitive type");
+			throw new ArgumentException($"Type '{type.FullName}' is not a valid primitive type");
 		}
 	}
 }

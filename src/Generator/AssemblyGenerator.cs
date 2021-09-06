@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -157,6 +156,7 @@ namespace IL2CS.Generator
 
 		private static void ProcessField(TypeBuilder tb, FieldDescriptor field, Type fieldType)
 		{
+			bool generateFieldsOnly = tb.IsValueType;
 			byte indirection = 1;
 			while (fieldType.IsPointer)
 			{
@@ -164,9 +164,9 @@ namespace IL2CS.Generator
 				fieldType = fieldType.GetElementType();
 			}
 
-			string fieldName = fieldType.IsValueType ? field.Name : field.StorageName;
+			string fieldName = generateFieldsOnly ? field.Name : field.StorageName;
 			FieldAttributes fieldAttrs = field.Attributes & ~(FieldAttributes.InitOnly | FieldAttributes.Public | FieldAttributes.Private | FieldAttributes.PrivateScope);
-			fieldAttrs |= fieldType.IsValueType ? FieldAttributes.Public : FieldAttributes.Private;
+			fieldAttrs |= generateFieldsOnly ? FieldAttributes.Public : FieldAttributes.Private;
 			
 			FieldBuilder fb = tb.DefineField(fieldName, fieldType, fieldAttrs);
 
@@ -177,7 +177,7 @@ namespace IL2CS.Generator
 			}
 
 			// structs only get fields and attributes, nothing more.
-			if (fieldType.IsValueType)
+			if (generateFieldsOnly)
 			{
 				return;
 			}
@@ -359,13 +359,10 @@ namespace IL2CS.Generator
 					parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
 					);
 			}
-			else
-			{
-				return RegisterType(
-					descriptor,
-					m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
-					);
-			}
+			return RegisterType(
+				descriptor,
+				m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
+				);
 		}
 
 		private void BuildEnum(TypeDescriptor descriptor, TypeBuilder typeBuilder)
@@ -458,7 +455,11 @@ namespace IL2CS.Generator
 				else if (td.TypeDef.parentIndex >= 0)
 				{
 					TypeReference baseTypeReference = MakeTypeReferenceFromCppTypeIndex(td.TypeDef.parentIndex, td);
-					if (baseTypeReference.Name != "System.Object")
+					if (baseTypeReference.Name == "System.Object")
+					{
+						td.Base = new TypeReference(typeof(StructBase));
+					}
+					else
 					{
 						if (Types.TryGetType(baseTypeReference.Name, out Type builtInType))
 						{

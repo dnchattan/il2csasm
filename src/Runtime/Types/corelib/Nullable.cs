@@ -61,7 +61,7 @@ namespace IL2CS.Runtime.Types.corelib
 				}
 			}
 
-			Value = context.ReadValue<T>(valueOffset, indirection);
+			Value = (T)context.ReadValue(typeof(T), valueOffset, indirection);
 		}
 	}
 }

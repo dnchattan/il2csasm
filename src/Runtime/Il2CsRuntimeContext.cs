@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using IL2CS.Runtime.Types.corelib;
 
 namespace IL2CS.Runtime
 {
@@ -14,7 +15,7 @@ namespace IL2CS.Runtime
 		private readonly Dictionary<string, long> moduleAddresses = new();
 		private readonly ReadProcessMemoryCache rpmCache = new();
 		private readonly IntPtr processHandle;
-		public Process TargetProcess { get; private set; }
+		public Process TargetProcess { get; }
 		public Il2CsRuntimeContext(Process target)
 		{
 			TargetProcess = target;
@@ -41,31 +42,24 @@ namespace IL2CS.Runtime
 			}
 			return offsetAttr.OffsetBytes;
 		}
-
-		public void ReadFieldsT(object target, long targetAddress)
+		
+		public virtual void ReadFields(Type type, object target, long targetAddress)
 		{
-			GetType().GetMethod("ReadFields").MakeGenericMethod(target.GetType()).Invoke(this, new [] {target, targetAddress});
-		}
-
-		public virtual void ReadFields<T>(T target, long targetAddress)
-		{
-			Type type = target.GetType();
-
 			MethodInfo readFieldsOverride = type.GetMethod(
 				"ReadFields",
 				BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public,
 				null,
 				CallingConventions.HasThis,
-				new Type[]
+				new []
 				{
+					typeof(Il2CsRuntimeContext),
 					typeof(long),
-					typeof(Il2CsRuntimeContext)
 				},
 				null);
 
 			if (readFieldsOverride != null)
 			{
-				readFieldsOverride.Invoke(target, Array.Empty<object>());
+				readFieldsOverride.Invoke(target, new object[]{ this, targetAddress });
 				return;
 			}
 
@@ -77,7 +71,7 @@ namespace IL2CS.Runtime
 			}
 		}
 
-		public void ReadField<T>(T target, long targetAddress, FieldInfo field)
+		public void ReadField(object target, long targetAddress, FieldInfo field)
 		{
 			long offset = targetAddress + GetMemberFieldOffset(field);
 			byte indirection = 1;
@@ -87,11 +81,16 @@ namespace IL2CS.Runtime
 				indirection = indirectionAttr.Indirection;
 			}
 
-			T result = ReadValue<T>(offset, indirection);
+			object result = ReadValue(field.FieldType, offset, indirection);
 			field.SetValue(target, result);
 		}
 
 		public T ReadValue<T>(long address, byte indirection)
+		{
+			return (T)ReadValue(typeof(T), address, indirection);
+		}
+		
+		public object ReadValue(Type type, long address, byte indirection)
 		{
 			for (; indirection > 1; --indirection)
 			{
@@ -105,44 +104,60 @@ namespace IL2CS.Runtime
 			{
 				return default;
 			}
-			if (typeof(T).IsAssignableTo(typeof(StructBase)))
+			if (type == typeof(string))
 			{
-				return ReadStruct<T>(address);
+				return ReadString(address);
 			}
-			if (typeof(T).IsPrimitive)
+			if (type.IsEnum)
 			{
-				return this.ReadPrimitive<T>(address);
+				return this.ReadPrimitive(type.GetEnumUnderlyingType(), address);
 			}
+			if (type.IsPrimitive)
+			{
+				return this.ReadPrimitive(type, address);
+			}
+			return ReadStruct(type, address);
+		}
 
-			if (typeof(T).IsValueType)
-			{
-				return ReadStruct<T>(address);
-			}
-			throw new ApplicationException("Unknown type");
+		private object ReadString(long address)
+		{
+			Native__String? str = ReadValue<Native__String>(address, 2);
+			return str?.Value;
 		}
 
 		public T ReadStruct<T>()
 		{
-			bool isStatic = typeof(T).GetCustomAttribute<StaticAttribute>(inherit: true) != null;
-			if (!isStatic)
-			{
-				throw new ApplicationException($"Type '{typeof(T).FullName}' does not have the required [Static]");
-			}
-			if (!typeof(T).IsAssignableTo(typeof(StructBase)))
-			{
-				throw new ArgumentException($"Type '{typeof(T).FullName}' is not a supported type");
-			}
-			T result = (T)Activator.CreateInstance(typeof(T), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, (long)0 }, null);
-			return result;
+			return (T)ReadStruct(typeof(T));
 		}
 
-		public T ReadStruct<T>(long address)
+		public object ReadStruct(Type type)
 		{
-			if (!typeof(T).IsAssignableTo(typeof(StructBase)))
+			bool isStatic = type.GetCustomAttribute<StaticAttribute>(inherit: true) != null;
+			if (!isStatic)
 			{
-				throw new ArgumentException($"Type '{typeof(T).FullName}' is not a supported type");
+				throw new ApplicationException($"Type '{type.FullName}' does not have the required [Static]");
 			}
-			T result = (T)Activator.CreateInstance(typeof(T), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, address }, null);
+			if (!type.IsAssignableTo(typeof(StructBase)))
+			{
+				throw new ArgumentException($"Type '{type.FullName}' is not a supported type");
+			}
+			return Activator.CreateInstance(type, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, (long)0 }, null);
+		}
+
+		public object ReadStruct(Type type, long address)
+		{
+			if (type.IsInterface)
+			{
+				// TODO
+				return null;
+			}
+			if (type.IsAssignableTo(typeof(StructBase)))
+			{
+				return Activator.CreateInstance(type, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, address }, null);
+			}
+			// value type
+			object result = Activator.CreateInstance(type);
+			ReadFields(type, result, address);
 			return result;
 		}
 

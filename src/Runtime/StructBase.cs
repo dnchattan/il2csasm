@@ -14,6 +14,14 @@ namespace IL2CS.Runtime
 		public Il2CsRuntimeContext Context { get; set; }
 		public long Address { get; set; }
 
+		public ClassDefinition klass
+		{
+			get
+			{
+				return Context.ReadValue<ClassDefinition>(Address, 2);
+			}
+		}
+
 		protected virtual uint? Native__ObjectSize
 		{
 			get
@@ -31,7 +39,7 @@ namespace IL2CS.Runtime
 
 		public T As<T>() where T : StructBase
 		{
-			T cast = Context.ReadValue<T>(Address, 1);
+			T cast = Context.ReadValue(typeof(T), Address, 1) as T;
 			return cast;
 		}
 
@@ -43,7 +51,7 @@ namespace IL2CS.Runtime
 			}
 			m_isLoaded = true;
 			EnsureCache();
-			Context.ReadFieldsT(this, Address);
+			Context.ReadFields(GetType(), this, Address);
 		}
 
 		protected virtual void EnsureCache()
