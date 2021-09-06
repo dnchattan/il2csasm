@@ -16,6 +16,14 @@ namespace IL2CS.Generator
 {
 	public class AssemblyGenerator
 	{
+		private static readonly MethodInfo StructBase_LoadMethod = typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance);
+		private static readonly Type[] StructBase_Constructor_Params = { typeof(Il2CsRuntimeContext), typeof(long) };
+		private static readonly ConstructorInfo StructBase_Constructor = typeof(StructBase).GetConstructor(
+			BindingFlags.NonPublic | BindingFlags.Instance, 
+			null,
+			StructBase_Constructor_Params,
+			null
+			);
 		private enum State
 		{
 			Initialized = 0,
@@ -29,7 +37,7 @@ namespace IL2CS.Generator
 		public void Generate(string outputPath)
 		{
 			AppDomain currentDomain = Thread.GetDomain();
-			ResolveEventHandler resolveHandler = new(ResolveEvent);
+			ResolveEventHandler resolveHandler = ResolveEvent;
 			currentDomain.TypeResolve += resolveHandler;
 
 			Dictionary<State, Action> states = new()
@@ -156,22 +164,33 @@ namespace IL2CS.Generator
 				fieldType = fieldType.GetElementType();
 			}
 
-			FieldBuilder fb = tb.DefineField(field.StorageName, fieldType, field.Attributes & ~(FieldAttributes.InitOnly | FieldAttributes.Public) | FieldAttributes.Private);
+			string fieldName = fieldType.IsValueType ? field.Name : field.StorageName;
+			FieldAttributes fieldAttrs = field.Attributes & ~(FieldAttributes.InitOnly | FieldAttributes.Public | FieldAttributes.Private | FieldAttributes.PrivateScope);
+			fieldAttrs |= fieldType.IsValueType ? FieldAttributes.Public : FieldAttributes.Private;
+			
+			FieldBuilder fb = tb.DefineField(fieldName, fieldType, fieldAttrs);
+
+			fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new[] { typeof(int) }), new object[] { field.Offset }));
+			if (indirection > 1)
+			{
+				fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(IndirectionAttribute).GetConstructor(new [] { typeof(byte) }), new object[] { indirection }));
+			}
+
+			// structs only get fields and attributes, nothing more.
+			if (fieldType.IsValueType)
+			{
+				return;
+			}
+
 			if (field.DefaultValue != null)
 			{
 				fb.SetConstant(field.DefaultValue);
 			}
 
-			fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new Type[] { typeof(int) }), new object[] { field.Offset }));
-			if (indirection > 1)
-			{
-				fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(IndirectionAttribute).GetConstructor(new Type[] { typeof(byte) }), new object[] { indirection }));
-			}
-
 			MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public, fieldType, Type.EmptyTypes);
 			ILGenerator mbil = mb.GetILGenerator();
 			mbil.Emit(OpCodes.Ldarg_0);
-			mbil.Emit(OpCodes.Call, typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance));
+			mbil.Emit(OpCodes.Call, StructBase_LoadMethod);
 			mbil.Emit(OpCodes.Ldarg_0);
 			mbil.Emit(OpCodes.Ldfld, fb);
 			mbil.Emit(OpCodes.Ret);
@@ -269,81 +288,38 @@ namespace IL2CS.Generator
 				throw new ApplicationException("Invalid state");
 			}
 
-			if (Types.TryGetType(descriptor.Name, out Type type))
-			{
-				RegisterType(descriptor, type);
-				return type;
-			}
+			Type type = CreateAndRegisterType(descriptor);
+			Helpers.VerifyElseThrow(m_generatedTypes.ContainsKey(descriptor), "type was not added to m_generatedTypes");
 
-			if (descriptor.DeclaringParent != null)
-			{
-				TypeBuilder parentBuilder = EnsureType(descriptor.DeclaringParent) as TypeBuilder;
-				if (parentBuilder == null)
-				{
-					throw new ApplicationException("Internal error: Parent is not of type TypeBuilder");
-				}
-				if (descriptor.TypeDef.IsEnum)
-				{
-					TypeBuilder eb = parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, typeof(Enum), null);
-					m_generatedTypes.Add(descriptor, eb);
-					foreach (FieldDescriptor field in descriptor.Fields)
-					{
-						FieldBuilder fb = eb.DefineField(field.StorageName, ResolveTypeReference(field.Type), field.Attributes);
-						if (field.DefaultValue != null)
-						{
-							fb.SetConstant(field.DefaultValue);
-						}
-					}
-					type = eb;
-				}
-				else
-				{
-					type = parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type);
-					m_generatedTypes.Add(descriptor, type);
-				}
-			}
-			else
-			{
-				if (descriptor.TypeDef.IsEnum)
-				{
-					// NB: first field is always 'value__'
-					TypeBuilder eb = m_module.DefineType(descriptor.Name, descriptor.Attributes, typeof(Enum), null);
-					m_generatedTypes.Add(descriptor, eb);
-					foreach (FieldDescriptor field in descriptor.Fields)
-					{
-						FieldBuilder fb = eb.DefineField(field.Name, ResolveTypeReference(field.Type), field.Attributes);
-						if (field.DefaultValue != null)
-						{
-							fb.SetConstant(field.DefaultValue);
-						}
-					}
-					type = eb;
-				}
-				else
-				{
-					type = m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type);
-					m_generatedTypes.Add(descriptor, type);
-				}
-			}
-			if (!m_generatedTypes.ContainsKey(descriptor))
-			{
-				throw new ApplicationException("Internal error: type was not added to m_generatedTypes");
-			}
-			m_generatedTypeByFullName.Add(type.FullName, type);
-			if (!m_generatedTypeByClassName.ContainsKey(type.Name))
-			{
-				m_generatedTypeByClassName.Add(type.Name, new List<Type>());
-			}
-			m_generatedTypeByClassName[type.Name].Add(type);
 			if (type is TypeBuilder tb)
 			{
+				// enum
+				if (descriptor.TypeDef.IsEnum)
+				{
+					BuildEnum(descriptor, tb);
+				}
+				// generics
 				if (descriptor.GenericParameterNames.Length > 0)
 				{
 					tb.DefineGenericParameters(descriptor.GenericParameterNames);
 				}
+				// constructor
 				if (!descriptor.TypeDef.IsEnum && !descriptor.Attributes.HasFlag(TypeAttributes.Interface))
 				{
-					tb.DefineDefaultConstructor(MethodAttributes.Public);
+					if (descriptor.TypeDef.IsValueType)
+					{
+						tb.DefineDefaultConstructor(MethodAttributes.Public);
+					}
+					else
+					{
+						ConstructorBuilder ctor = tb.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard | CallingConventions.HasThis, StructBase_Constructor_Params);
+						ILGenerator ilCtor = ctor.GetILGenerator();
+						ilCtor.Emit(OpCodes.Ldarg_0);
+						ilCtor.Emit(OpCodes.Ldarg_1);
+						ilCtor.Emit(OpCodes.Ldarg_2);
+						ilCtor.Emit(OpCodes.Call, StructBase_Constructor);
+						ilCtor.Emit(OpCodes.Ret);
+					}
 				}
 			}
 
@@ -359,19 +335,65 @@ namespace IL2CS.Generator
 			return type;
 		}
 
-		private void RegisterType(TypeDescriptor descriptor, Type type)
+		private Type CreateAndRegisterType(TypeDescriptor descriptor)
+		{
+			if (Types.TryGetType(descriptor.Name, out Type type))
+			{
+				return RegisterType(descriptor, type);
+			}
+
+			if (descriptor.DeclaringParent != null)
+			{
+				type = EnsureType(descriptor.DeclaringParent);
+				if (type == null)
+				{
+					return RegisterType(descriptor, null);
+				}
+
+				if (type is not TypeBuilder parentBuilder)
+				{
+					throw new ApplicationException("Internal error: Parent is not of type TypeBuilder");
+				}
+				return RegisterType(
+					descriptor, 
+					parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
+					);
+			}
+			else
+			{
+				return RegisterType(
+					descriptor,
+					m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
+					);
+			}
+		}
+
+		private void BuildEnum(TypeDescriptor descriptor, TypeBuilder typeBuilder)
+		{
+			foreach (FieldDescriptor field in descriptor.Fields)
+			{
+				FieldBuilder fb = typeBuilder.DefineField(field.Name, ResolveTypeReference(field.Type), field.Attributes);
+				if (field.DefaultValue != null)
+				{
+					fb.SetConstant(field.DefaultValue);
+				}
+			}
+		}
+
+		private Type RegisterType(TypeDescriptor descriptor, Type type)
 		{
 			m_generatedTypes.Add(descriptor, type);
-			if (type != null && descriptor.Name != type.Name && !type.IsAssignableTo(typeof(StructBase)))
-			{
-				Debugger.Break();
-			}
-			m_generatedTypeByFullName.Add(descriptor.Name, type);
+			//if (type != null && descriptor.Name != type.Name && !type.IsEnum && !type.IsAssignableTo(typeof(StructBase)))
+			//{
+			//	Debugger.Break();
+			//}
+			m_generatedTypeByFullName.Add(descriptor.FullName, type);
 			if (!m_generatedTypeByClassName.ContainsKey(descriptor.Name))
 			{
 				m_generatedTypeByClassName.Add(descriptor.Name, new List<Type>());
 			}
 			m_generatedTypeByClassName[descriptor.Name].Add(type);
+			return type;
 		}
 
 		private void IndexTypeDescriptors()
@@ -541,10 +563,10 @@ namespace IL2CS.Generator
 		private string GetTypeDefName(Il2CppTypeDefinition typeDef)
 		{
 			string typeName = m_context.Metadata.GetStringFromIndex(typeDef.nameIndex);
-			int index = typeName.IndexOf("`");
+			int index = typeName.IndexOf("`", StringComparison.Ordinal);
 			if (index != -1)
 			{
-				typeName = typeName.Substring(0, index);
+				typeName = typeName[..index];
 			}
 			string ns = m_context.Metadata.GetStringFromIndex(typeDef.namespaceIndex);
 			if (ns != "")
@@ -637,7 +659,7 @@ namespace IL2CS.Generator
 			}
 		}
 
-		private static readonly Dictionary<int, Type> TypeMap = new Dictionary<int, Type>
+		private static readonly Dictionary<int, Type> TypeMap = new()
 		{
 			{1,typeof(void)},
 			{2,typeof(bool)},

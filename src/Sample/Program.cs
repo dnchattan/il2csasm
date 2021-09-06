@@ -30,6 +30,10 @@ namespace examples
 	[Size(16)]
 	public class AppModelStaticFields : StructBase
 	{
+		public AppModelStaticFields(Il2CsRuntimeContext context, long address) : base(context, address)
+		{
+		}
+
 		[Offset(8)]
 		[Indirection(2)]
 		private Client.Model.AppModel _Instance;
@@ -45,8 +49,12 @@ namespace examples
 	}
 
 	[Static]
-	public class AppModelStatics : StaticStructBase
+	public class AppModelStatics : StructBase
 	{
+		public AppModelStatics(Il2CsRuntimeContext context, long address) : base(context, address)
+		{
+		}
+
 		[Address(58725120, "GameAssembly.dll")]
 		[Indirection(2)]
 		private MethodDefinition _GetInstance;

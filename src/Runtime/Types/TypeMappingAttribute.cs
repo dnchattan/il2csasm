@@ -2,7 +2,7 @@
 
 namespace IL2CS.Runtime.Types
 {
-	[AttributeUsage(AttributeTargets.Class, Inherited = true, AllowMultiple = false)]
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = true, AllowMultiple = false)]
 	public class TypeMappingAttribute : Attribute
 	{
 		public Type Type { get; private set; }

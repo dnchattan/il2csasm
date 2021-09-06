@@ -8,5 +8,8 @@ namespace IL2CS.Runtime
 {
 	public class UnknownClass : StructBase
 	{
+		public UnknownClass(Il2CsRuntimeContext context, long address) : base(context, address)
+		{
+		}
 	}
 }
