@@ -12,7 +12,7 @@ namespace IL2CS.Runtime.Types.corelib
 	{
 		public string Value;
 		// ReSharper disable once UnusedMember.Local
-		private void ReadFields(Il2CsRuntimeContext context, long address)
+		private void ReadFields(Il2CsRuntimeContext context, ulong address)
 		{
 			int strlen = context.ReadValue<int>(address + 16, 1);
 			if (strlen == 0)
@@ -21,7 +21,7 @@ namespace IL2CS.Runtime.Types.corelib
 				return;
 			}
 
-			ReadOnlyMemory<byte> stringData = context.ReadMemory(address + 20, strlen * 2);
+			ReadOnlyMemory<byte> stringData = context.ReadMemory(address + 20, (ulong)strlen * 2);
 			Value = Encoding.Unicode.GetString(stringData.Span);
 		}
 	}

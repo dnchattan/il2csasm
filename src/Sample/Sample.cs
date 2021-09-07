@@ -7,7 +7,7 @@ using IL2CS.Runtime.Types.Reflection;
 
 namespace examples
 {
-	internal class Program
+	internal class Sample
 	{
 		private static void Main(string[] args)
 		{
@@ -32,7 +32,7 @@ namespace examples
 	[Size(16)]
 	public class AppModelStaticFields : StructBase
 	{
-		public AppModelStaticFields(Il2CsRuntimeContext context, long address) : base(context, address)
+		public AppModelStaticFields(Il2CsRuntimeContext context, ulong address) : base(context, address)
 		{
 		}
 
@@ -46,27 +46,6 @@ namespace examples
 			{
 				Load();
 				return _Instance;
-			}
-		}
-	}
-
-	[Static]
-	public class AppModelStatics : StructBase
-	{
-		public AppModelStatics(Il2CsRuntimeContext context, long address) : base(context, address)
-		{
-		}
-
-		[Address(58725120, "GameAssembly.dll")]
-		[Indirection(2)]
-		private NativeMethodInfo _GetInstance;
-
-		public NativeMethodInfo GetInstance
-		{
-			get
-			{
-				Load();
-				return _GetInstance;
 			}
 		}
 	}

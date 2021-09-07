@@ -7,17 +7,17 @@ namespace IL2CS.Runtime
 	internal class MemoryCacheEntry
 	{
 		private readonly ReadOnlyMemory<byte> Data;
-		private readonly long Address;
-		private readonly long Size; // in bytes
+		private readonly ulong Address;
+		private readonly ulong Size; // in bytes
 
-		public MemoryCacheEntry(long address, long size, byte[] data)
+		public MemoryCacheEntry(ulong address, ulong size, byte[] data)
 		{
 			Data = new ReadOnlyMemory<byte>(data);
 			Address = address;
 			Size = size;
 		}
 
-		public bool Contains(long address, long size)
+		public bool Contains(ulong address, ulong size)
 		{
 			if (address >= Address + Size)
 			{
@@ -34,7 +34,7 @@ namespace IL2CS.Runtime
 			return true;
 		}
 
-		public ReadOnlyMemory<byte> ReadRange(long address, long size)
+		public ReadOnlyMemory<byte> ReadRange(ulong address, ulong size)
 		{
 			if (!Contains(address, size))
 			{
@@ -45,16 +45,16 @@ namespace IL2CS.Runtime
 	}
 	internal class ReadProcessMemoryCache
 	{
-		private SortedDictionary<long, WeakReference<MemoryCacheEntry>> cache = new();
+		private SortedDictionary<ulong, WeakReference<MemoryCacheEntry>> cache = new();
 
-		public MemoryCacheEntry Store(long address, byte[] data)
+		public MemoryCacheEntry Store(ulong address, byte[] data)
 		{
-			MemoryCacheEntry entry = new(address, data.Length, data);
+			MemoryCacheEntry entry = new(address, (ulong)data.Length, data);
 			cache.Add(address, new(entry));
 			return entry;
 		}
 
-		public ReadOnlyMemory<byte>? Find(long address, long size)
+		public ReadOnlyMemory<byte>? Find(ulong address, ulong size)
 		{
 			MemoryCacheEntry entry = FindEntry(address, size);
 
@@ -71,7 +71,7 @@ namespace IL2CS.Runtime
 			return entry.ReadRange(address, size);
 		}
 
-		public MemoryCacheEntry FindEntry(long address, long size)
+		public MemoryCacheEntry FindEntry(ulong address, ulong size)
 		{
 			MemoryCacheEntry[] allValues = cache.Values.Select(value => value.TryGetTarget(out MemoryCacheEntry target) ? target : null).ToArray();
 			MemoryCacheEntry entry = allValues.FirstOrDefault(entry => entry != null && entry.Contains(address, size));
@@ -86,8 +86,8 @@ namespace IL2CS.Runtime
 
 		private void RebuildCache()
 		{
-			SortedDictionary<long, WeakReference<MemoryCacheEntry>> newCache = new();
-			foreach (KeyValuePair<long, WeakReference<MemoryCacheEntry>> kvp in cache)
+			SortedDictionary<ulong, WeakReference<MemoryCacheEntry>> newCache = new();
+			foreach (KeyValuePair<ulong, WeakReference<MemoryCacheEntry>> kvp in cache)
 			{
 				if (kvp.Value.TryGetTarget(out MemoryCacheEntry value))
 				{

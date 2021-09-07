@@ -34,7 +34,7 @@ namespace IL2CS.Runtime.Types.corelib
 		public bool HasValue { get; private set; }
 
 		// ReSharper disable once UnusedMember.Local
-		private void ReadFields(long address, Il2CsRuntimeContext context)
+		private void ReadFields(Il2CsRuntimeContext context, ulong address)
 		{
 			ReadOnlyMemory<byte> hasValue = context.ReadMemory(address + Native__ValueSize, 1);
 			HasValue = BitConverter.ToBoolean(hasValue.Span);
@@ -51,7 +51,7 @@ namespace IL2CS.Runtime.Types.corelib
 				valueType = valueType.GetElementType();
 			}
 
-			long valueOffset = address;
+			ulong valueOffset = address;
 			for (; indirection > 1; --indirection)
 			{
 				valueOffset = context.ReadPointer(valueOffset);

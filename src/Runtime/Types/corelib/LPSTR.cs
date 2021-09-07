@@ -10,7 +10,7 @@ namespace IL2CS.Runtime.Types.corelib
 	{
 		public string Value;
 		// ReSharper disable once UnusedMember.Local
-		private void ReadFields(Il2CsRuntimeContext context, long address)
+		private void ReadFields(Il2CsRuntimeContext context, ulong address)
 		{
 			address = context.ReadPointer(address);
 			ReadOnlyMemory<byte> stringData = context.ReadMemory(address, 512);

@@ -6,7 +6,7 @@ namespace IL2CS.Runtime.Types.Reflection
 	[Size(4376)]
 	public class ClassDefinition : StructBase
 	{
-		public ClassDefinition(Il2CsRuntimeContext context, long address) : base(context, address)
+		public ClassDefinition(Il2CsRuntimeContext context, ulong address) : base(context, address)
 		{
 		}
 

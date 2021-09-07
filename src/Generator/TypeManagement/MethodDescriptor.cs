@@ -8,14 +8,14 @@ namespace IL2CS.Generator.TypeManagement
 {
 	public class MethodDescriptor
 	{
-		public MethodDescriptor(string name, long address)
+		public MethodDescriptor(string name, ulong address)
 		{
 			Name = name;
 			Address = address;
 		}
 
 		public readonly string Name;
-		public readonly long Address;
+		public readonly ulong Address;
 		public readonly List<TypeReference> DeclaringTypeArgs = new();
 	}
 }

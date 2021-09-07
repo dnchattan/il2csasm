@@ -8,7 +8,7 @@ namespace IL2CS.Runtime
 {
 	public static class BitReader
 	{
-		private static readonly Dictionary<Type, Func<Il2CsRuntimeContext, long, object>> s_impl = new ();
+		private static readonly Dictionary<Type, Func<Il2CsRuntimeContext, ulong, object>> s_impl = new ();
 		static BitReader()
 		{
 			// ReSharper disable BuiltInTypeReferenceStyle
@@ -24,9 +24,9 @@ namespace IL2CS.Runtime
 			s_impl.Add(typeof(UInt64), (context, address) => BitConverter.ToUInt64(context.ReadMemory(address, sizeof(UInt64)).Span));
 			// ReSharper restore BuiltInTypeReferenceStyle
 		}
-		public static object ReadPrimitive(this Il2CsRuntimeContext context, Type type, long address)
+		public static object ReadPrimitive(this Il2CsRuntimeContext context, Type type, ulong address)
 		{
-			if (s_impl.TryGetValue(type, out Func<Il2CsRuntimeContext, long, object> fn))
+			if (s_impl.TryGetValue(type, out Func<Il2CsRuntimeContext, ulong, object> fn))
 			{
 				return fn(context, address);
 			}

@@ -17,12 +17,7 @@ namespace IL2CS.Generator
 {
 	public class AssemblyGenerator
 	{
-		private static readonly Type MethodDictionaryType = typeof(Dictionary<Type, MethodDefinition>);
-		private static readonly MethodInfo MethodDefinition_LookupMethod =
-			typeof(MethodDefinition).GetMethod("Lookup", BindingFlags.Static | BindingFlags.Public);
-		private static readonly ConstructorInfo MethodDictionary_Ctor = MethodDictionaryType.GetConstructor(Type.EmptyTypes);
-		private static readonly MethodInfo MethodDictionary_AddMethod = MethodDictionaryType.GetMethod("Add");
-		private static readonly Type[] MethodDefinition_Ctor_Args = { typeof(long), typeof(string) };
+		private static readonly Type[] MethodDefinition_Ctor_Args = { typeof(ulong), typeof(string) };
 		private static readonly ConstructorInfo MethodDefinition_Ctor = typeof(MethodDefinition).GetConstructor(
 			BindingFlags.Public | BindingFlags.Instance,
 			null,
@@ -35,7 +30,7 @@ namespace IL2CS.Generator
 
 		private static readonly MethodInfo StructBase_LoadMethod =
 			typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance);
-		private static readonly Type[] StructBase_Constructor_Params = { typeof(Il2CsRuntimeContext), typeof(long) };
+		private static readonly Type[] StructBase_Constructor_Params = { typeof(Il2CsRuntimeContext), typeof(ulong) };
 		private static readonly ConstructorInfo StructBase_Constructor = typeof(StructBase).GetConstructor(
 			BindingFlags.NonPublic | BindingFlags.Instance, 
 			null,
@@ -183,7 +178,7 @@ namespace IL2CS.Generator
 					continue;
 
 				Type[] genericTypeParams = ((TypeInfo)((Type)tb)).GenericTypeParameters;
-				if (methods.Length > 1 && genericTypeParams.Length != 1)
+				if (methods.Length > 1 && genericTypeParams.Length == 0)
 					continue; // not supported
 
 				MethodBuilder mb = tb.DefineMethod($"get_method_{methodGroup.Key}",
@@ -193,7 +188,7 @@ namespace IL2CS.Generator
 				if (methods.Length > 1)
 				{
 					Type typeT0 = genericTypeParams[0];
-					
+
 					Label? nextLabel = null;
 					foreach (MethodDescriptor method in methods)
 					{
@@ -219,7 +214,7 @@ namespace IL2CS.Generator
 						mbil.Emit(OpCodes.Brfalse_S, nextLabel.Value);
 
 						// true -> return new MethodDefinition(address, moduleName)
-						mbil.Emit(OpCodes.Ldc_I8, method.Address);
+						mbil.Emit(OpCodes.Ldc_I8, (long)method.Address);
 						mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
 						mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
 						mbil.Emit(OpCodes.Ret);
@@ -231,7 +226,7 @@ namespace IL2CS.Generator
 				}
 				else
 				{
-					mbil.Emit(OpCodes.Ldc_I8, methods[0].Address);
+					mbil.Emit(OpCodes.Ldc_I8, (long)methods[0].Address);
 					mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
 					mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
 					mbil.Emit(OpCodes.Ret);
@@ -271,7 +266,7 @@ namespace IL2CS.Generator
 			
 			FieldBuilder fb = tb.DefineField(fieldName, fieldType, fieldAttrs);
 
-			fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new[] { typeof(int) }), new object[] { field.Offset }));
+			fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(OffsetAttribute).GetConstructor(new[] { typeof(ulong) }), new object[] { field.Offset }));
 			if (indirection > 1)
 			{
 				fb.SetCustomAttribute(new CustomAttributeBuilder(typeof(IndirectionAttribute).GetConstructor(new [] { typeof(byte) }), new object[] { indirection }));
@@ -503,6 +498,21 @@ namespace IL2CS.Generator
 				return;
 			}
 
+			foreach ((uint metadataUsageIndex, uint methodSpecIndex) in m_context.Metadata.metadataUsageDic[
+				Il2CppMetadataUsage.kIl2CppMetadataUsageMethodRef]) //kIl2CppMetadataUsageMethodRef
+			{
+				Il2CppMethodSpec methodSpec = m_context.Il2Cpp.methodSpecs[methodSpecIndex];
+				ulong address = m_context.Il2Cpp.GetRVA(m_context.Il2Cpp.metadataUsages[metadataUsageIndex]);
+				methodSpecAddresses.Add(methodSpec, address);
+			}
+
+			foreach ((uint metadataUsageIndex, uint methodDefIndex) in m_context.Metadata.metadataUsageDic[Il2CppMetadataUsage.kIl2CppMetadataUsageMethodDef]) //kIl2CppMetadataUsageMethodDef
+			{
+				Il2CppMethodDefinition methodDef = m_context.Metadata.methodDefs[methodDefIndex];
+				ulong address = m_context.Il2Cpp.GetRVA(m_context.Il2Cpp.metadataUsages[metadataUsageIndex]);
+				methodAddresses.Add(methodDef, address);
+			}
+
 			// Declare all types before associating dependencies
 			for (int typeIndex = 0; typeIndex < m_context.Metadata.typeDefs.Length; ++typeIndex)
 			{
@@ -599,7 +609,7 @@ namespace IL2CS.Generator
 						TypeReference fieldType = MakeTypeReferenceFromCppTypeIndex(fieldDef.typeIndex, td);
 						string fieldName = m_context.Metadata.GetStringFromIndex(fieldDef.nameIndex);
 						FieldAttributes attrs = (FieldAttributes)fieldCppType.attrs & ~FieldAttributes.InitOnly;
-						int offset = m_context.Il2Cpp.GetFieldOffsetFromIndex(td.TypeIndex, fieldIndex - td.TypeDef.fieldStart, fieldIndex, td.TypeDef.IsValueType, attrs.HasFlag(FieldAttributes.Static));
+						ulong offset = (ulong)m_context.Il2Cpp.GetFieldOffsetFromIndex(td.TypeIndex, fieldIndex - td.TypeDef.fieldStart, fieldIndex, td.TypeDef.IsValueType, attrs.HasFlag(FieldAttributes.Static));
 						FieldDescriptor fieldDescriptor = new(fieldName, fieldType, attrs, offset);
 						if (m_context.Metadata.GetFieldDefaultValueFromIndex(fieldIndex, out Il2CppFieldDefaultValue fieldDefaultValue) && fieldDefaultValue.dataIndex != -1)
 						{
@@ -625,34 +635,33 @@ namespace IL2CS.Generator
 					}
 
 					// generic instance method arguments
-					if (m_context.Il2Cpp.methodDefinitionMethodSpecs.TryGetValue(methodIndex, out var methodSpecs))
+					if (m_context.Il2Cpp.methodDefinitionMethodSpecs.TryGetValue(methodIndex, out var methodSpecs)) 
 					{
-						foreach (var methodSpec in methodSpecs)
+						foreach (Il2CppMethodSpec methodSpec in methodSpecs)
 						{
-							if (methodSpec.classIndexIndex != -1)
+							if (methodSpec.classIndexIndex == -1) continue;
+							if (!methodSpecAddresses.TryGetValue(methodSpec, out ulong address)) continue;
+
+							Il2CppGenericInst classInst = m_context.Il2Cpp.genericInsts[methodSpec.classIndexIndex];
+							ulong[] pointers = m_context.Il2Cpp.MapVATR<ulong>(classInst.type_argv, classInst.type_argc);
+
+							MethodDescriptor md = new(methodName, address);
+							for (int i = 0; i < classInst.type_argc; i++)
 							{
-								var classInst = m_context.Il2Cpp.genericInsts[methodSpec.classIndexIndex];
-								var pointers = m_context.Il2Cpp.MapVATR<ulong>(classInst.type_argv, classInst.type_argc);
-
-								ulong genericMethodPointer = m_context.Il2Cpp.methodSpecGenericMethodPointers[methodSpec];
-								ulong address = m_context.Il2Cpp.GetRVA(genericMethodPointer);
-								MethodDescriptor md = new(methodName, (long)address);
-								for (int i = 0; i < classInst.type_argc; i++)
-								{
-									var il2CppType = m_context.Il2Cpp.GetIl2CppType(pointers[i]);
-									string typeName = m_context.Executor.GetTypeName(il2CppType, true, false);
-									md.DeclaringTypeArgs.Add(new TypeReference(typeName, il2CppType, td));
-								}
-
-								td.Methods.Add(md);
+								Il2CppType il2CppType = m_context.Il2Cpp.GetIl2CppType(pointers[i]);
+								string typeName = m_context.Executor.GetTypeName(il2CppType, true, false);
+								md.DeclaringTypeArgs.Add(new TypeReference(typeName, il2CppType, td));
 							}
+
+							td.Methods.Add(md);
 						}
 					}
 					// TODO: Get address
 					//else
 					//{
 					//	MethodDescriptor md = new(methodName, 0);
-					//	td.Methods.Add(md);
+					//	ulong address = methodAddresses[methodDef];
+					//	td.Methods.Add(md, address);
 					//}
 				}
 			}
@@ -871,6 +880,8 @@ namespace IL2CS.Generator
 		private readonly AssemblyBuilder m_asm;
 		private readonly ModuleBuilder m_module;
 		private readonly AssemblyGeneratorContext m_context;
+		private readonly Dictionary<Il2CppMethodDefinition, ulong> methodAddresses = new();
+		private readonly Dictionary<Il2CppMethodSpec, ulong> methodSpecAddresses = new();
 		private readonly Dictionary<int, TypeDescriptor> m_typeCache = new();
 		private readonly List<TypeDescriptor> m_typeDescriptors = new();
 		private readonly Dictionary<TypeDescriptor, Type> m_generatedTypes = new();

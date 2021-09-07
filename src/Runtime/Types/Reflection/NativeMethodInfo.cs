@@ -5,7 +5,7 @@ namespace IL2CS.Runtime.Types.Reflection
 	[Size(80)]
 	public class NativeMethodInfo : StructBase
 	{
-		public NativeMethodInfo(Il2CsRuntimeContext context, long address) : base(context, address)
+		public NativeMethodInfo(Il2CsRuntimeContext context, ulong address) : base(context, address)
 		{
 		}
 

@@ -12,7 +12,7 @@ namespace IL2CS.Runtime
 {
 	public class Il2CsRuntimeContext
 	{
-		private readonly Dictionary<string, long> moduleAddresses = new();
+		private readonly Dictionary<string, ulong> moduleAddresses = new();
 		private readonly ReadProcessMemoryCache rpmCache = new();
 		private readonly IntPtr processHandle;
 		public Process TargetProcess { get; }
@@ -22,12 +22,12 @@ namespace IL2CS.Runtime
 			processHandle = NativeWrapper.OpenProcess(ProcessAccessFlags.Read, inheritHandle: true, TargetProcess.Id);
 		}
 
-		public long GetMemberFieldOffset(FieldInfo field)
+		public ulong GetMemberFieldOffset(FieldInfo field)
 		{
 			AddressAttribute addressAttr = field.GetCustomAttribute<AddressAttribute>(inherit: true);
 			if (addressAttr != null)
 			{
-				long address = addressAttr.Address;
+				ulong address = addressAttr.Address;
 				if (!string.IsNullOrEmpty(addressAttr.RelativeToModule))
 				{
 					address += GetModuleAddress(addressAttr.RelativeToModule);
@@ -43,7 +43,7 @@ namespace IL2CS.Runtime
 			return offsetAttr.OffsetBytes;
 		}
 		
-		public virtual void ReadFields(Type type, object target, long targetAddress)
+		public virtual void ReadFields(Type type, object target, ulong targetAddress)
 		{
 			MethodInfo readFieldsOverride = type.GetMethod(
 				"ReadFields",
@@ -53,7 +53,7 @@ namespace IL2CS.Runtime
 				new []
 				{
 					typeof(Il2CsRuntimeContext),
-					typeof(long),
+					typeof(ulong),
 				},
 				null);
 
@@ -71,9 +71,9 @@ namespace IL2CS.Runtime
 			}
 		}
 
-		public void ReadField(object target, long targetAddress, FieldInfo field)
+		public void ReadField(object target, ulong targetAddress, FieldInfo field)
 		{
-			long offset = targetAddress + GetMemberFieldOffset(field);
+			ulong offset = targetAddress + GetMemberFieldOffset(field);
 			byte indirection = 1;
 			IndirectionAttribute indirectionAttr = field.GetCustomAttribute<IndirectionAttribute>(inherit: true);
 			if (indirectionAttr != null)
@@ -85,12 +85,12 @@ namespace IL2CS.Runtime
 			field.SetValue(target, result);
 		}
 
-		public T ReadValue<T>(long address, byte indirection)
+		public T ReadValue<T>(ulong address, byte indirection)
 		{
 			return (T)ReadValue(typeof(T), address, indirection);
 		}
 		
-		public object ReadValue(Type type, long address, byte indirection)
+		public object ReadValue(Type type, ulong address, byte indirection)
 		{
 			for (; indirection > 1; --indirection)
 			{
@@ -119,7 +119,7 @@ namespace IL2CS.Runtime
 			return ReadStruct(type, address);
 		}
 
-		private object ReadString(long address)
+		private object ReadString(ulong address)
 		{
 			Native__String? str = ReadValue<Native__String>(address, 2);
 			return str?.Value;
@@ -141,10 +141,10 @@ namespace IL2CS.Runtime
 			{
 				throw new ArgumentException($"Type '{type.FullName}' is not a supported type");
 			}
-			return Activator.CreateInstance(type, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, (long)0 }, null);
+			return Activator.CreateInstance(type, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, (ulong)0 }, null);
 		}
 
-		public object ReadStruct(Type type, long address)
+		public object ReadStruct(Type type, ulong address)
 		{
 			if (type.IsInterface)
 			{
@@ -161,7 +161,7 @@ namespace IL2CS.Runtime
 			return result;
 		}
 
-		internal long GetModuleAddress(string moduleName)
+		internal ulong GetModuleAddress(string moduleName)
 		{
 			if (moduleAddresses.ContainsKey(moduleName)) 
 				return moduleAddresses[moduleName];
@@ -171,17 +171,17 @@ namespace IL2CS.Runtime
 			if (module == null)
 				throw new Exception("Unable to locate GameAssembly.dll in memory");
 
-			moduleAddresses.Add(moduleName, (long)module.BaseAddress);
+			moduleAddresses.Add(moduleName, (ulong)module.BaseAddress);
 			return moduleAddresses[moduleName];
 		}
 
-		internal long ReadPointer(long address)
+		internal ulong ReadPointer(ulong address)
 		{
 			ReadOnlyMemory<byte> memory = ReadMemory(address, 8);
-			return BitConverter.ToInt64(memory.Span);
+			return BitConverter.ToUInt64(memory.Span);
 		}
 
-		internal ReadOnlyMemory<byte> ReadMemory(long address, long size)
+		internal ReadOnlyMemory<byte> ReadMemory(ulong address, ulong size)
 		{
 			ReadOnlyMemory<byte>? result = rpmCache.Find(address, size);
 			if (result != null)
@@ -196,7 +196,7 @@ namespace IL2CS.Runtime
 			return buffer;
 		}
 
-		internal MemoryCacheEntry CacheMemory(long address, long size)
+		internal MemoryCacheEntry CacheMemory(ulong address, ulong size)
 		{
 			MemoryCacheEntry result = rpmCache.FindEntry(address, size);
 			if (result != null)

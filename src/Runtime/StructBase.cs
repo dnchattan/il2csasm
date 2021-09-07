@@ -13,7 +13,7 @@ namespace IL2CS.Runtime
 		private MemoryCacheEntry m_cache;
 
 		public Il2CsRuntimeContext Context { get; set; }
-		public long Address { get; set; }
+		public ulong Address { get; set; }
 
 		// ReSharper disable once UnusedMember.Global
 		public ClassDefinition ClassDefinition
@@ -33,7 +33,7 @@ namespace IL2CS.Runtime
 			}
 		}
 
-		protected StructBase(Il2CsRuntimeContext context, long address)
+		protected StructBase(Il2CsRuntimeContext context, ulong address)
 		{
 			Context = context;
 			Address = address;
