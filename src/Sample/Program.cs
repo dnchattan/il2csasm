@@ -13,7 +13,7 @@ namespace examples
 		{
 			Process raidProc = GetRaidProcess();
 			Il2CsRuntimeContext runtime = new(raidProc);
-			var statics = Client.App.SingleInstance<Client.Model.AppModel>.method_get_Instance.DeclaringClass.StaticFields
+			var statics = Client.App.SingleInstance<Client.Model.AppModel>.method_get_Instance.Get(runtime).DeclaringClass.StaticFields
 				.As<AppModelStaticFields>();
 			Client.Model.AppModel appModel = statics.Instance;
 			Console.WriteLine(appModel.UserId); // avoid compile error by dumping this out

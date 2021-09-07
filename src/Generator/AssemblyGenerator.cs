@@ -30,6 +30,9 @@ namespace IL2CS.Generator
 			null);
 		private static readonly MethodInfo Type_GetTypeFromHandleMethod = typeof(Type).GetMethod("GetTypeFromHandle");
 
+		private static readonly MethodInfo Type_op_Equality =
+			typeof(Type).GetMethod("op_Equality", BindingFlags.Static | BindingFlags.Public);
+
 		private static readonly MethodInfo StructBase_LoadMethod =
 			typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance);
 		private static readonly Type[] StructBase_Constructor_Params = { typeof(Il2CsRuntimeContext), typeof(long) };
@@ -170,21 +173,6 @@ namespace IL2CS.Generator
 
 		private void ProcessMethods(TypeBuilder tb, TypeDescriptor td)
 		{
-			ILGenerator internalIlGenerator = null;
-
-			ILGenerator GetCctorIL()
-			{
-				if (internalIlGenerator != null) return internalIlGenerator;
-
-				ConstructorBuilder cctorBuilder = tb.DefineConstructor(
-					MethodAttributes.Private | MethodAttributes.HideBySig | MethodAttributes.SpecialName |
-					MethodAttributes.RTSpecialName | MethodAttributes.Static, CallingConventions.Standard,
-					Type.EmptyTypes);
-				internalIlGenerator = cctorBuilder.GetILGenerator();
-				
-				return internalIlGenerator;
-			}
-			
 			IEnumerable<IGrouping<string, MethodDescriptor>> methodGroups = td.Methods.GroupBy(method => method.Name);
 			foreach (IGrouping<string, MethodDescriptor> methodGroup in methodGroups)
 			{
@@ -194,20 +182,19 @@ namespace IL2CS.Generator
 				if (methods.Length == 0)
 					continue;
 
+				Type[] genericTypeParams = ((TypeInfo)((Type)tb)).GenericTypeParameters;
+				if (methods.Length > 1 && genericTypeParams.Length != 1)
+					continue; // not supported
+
+				MethodBuilder mb = tb.DefineMethod($"get_method_{methodGroup.Key}",
+					MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
+					typeof(MethodDefinition), Type.EmptyTypes);
+				ILGenerator mbil = mb.GetILGenerator();
 				if (methods.Length > 1)
 				{
-					if (((TypeInfo)((Type)tb)).GenericTypeParameters.Length == 0)
-					{
-						continue;
-					}
-
-					FieldBuilder staticFieldBuilder = tb.DefineField($"_method_{methodName}", MethodDictionaryType,
-						FieldAttributes.Private|FieldAttributes.Static| FieldAttributes.InitOnly);
-
-					ILGenerator staticTableIL = GetCctorIL();
-
-					staticTableIL.Emit(OpCodes.Newobj, MethodDictionary_Ctor);
+					Type typeT0 = genericTypeParams[0];
 					
+					Label? nextLabel = null;
 					foreach (MethodDescriptor method in methods)
 					{
 						if (method.DeclaringTypeArgs.Count == 0)
@@ -217,46 +204,42 @@ namespace IL2CS.Generator
 						if (declaringTypeArg0 == null || declaringTypeArg0.IsGenericType)
 							continue;
 
-						staticTableIL.Emit(OpCodes.Dup);
-						staticTableIL.Emit(OpCodes.Ldtoken, declaringTypeArg0);
-						staticTableIL.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
-						staticTableIL.Emit(OpCodes.Ldc_I8, method.Address);
-						staticTableIL.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
-						staticTableIL.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
-						staticTableIL.EmitCall(OpCodes.Callvirt, MethodDictionary_AddMethod, null);
-					}
-					staticTableIL.Emit(OpCodes.Stsfld, staticFieldBuilder);
+						if (nextLabel.HasValue)
+						{
+							mbil.MarkLabel(nextLabel.Value);
+						}
 
-					MethodBuilder mb = tb.DefineMethod($"get_method_{methodGroup.Key}",
-						MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
-						typeof(NativeMethodInfo), Type.EmptyTypes);
-					ILGenerator mbil = mb.GetILGenerator();
-					mbil.Emit(OpCodes.Ldtoken, ((TypeInfo)(Type)tb).GenericTypeParameters[0]);
-					mbil.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
-					mbil.Emit(OpCodes.Ldsfld, staticFieldBuilder);
-					mbil.EmitCall(OpCodes.Call, MethodDefinition_LookupMethod, null);
+						nextLabel = mbil.DefineLabel();
+						// if (typeof(T) == typeof(U)) 
+						mbil.Emit(OpCodes.Ldtoken, declaringTypeArg0);
+						mbil.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
+						mbil.Emit(OpCodes.Ldtoken, typeT0);
+						mbil.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
+						mbil.EmitCall(OpCodes.Call, Type_op_Equality, null);
+						mbil.Emit(OpCodes.Brfalse_S, nextLabel.Value);
+
+						// true -> return new MethodDefinition(address, moduleName)
+						mbil.Emit(OpCodes.Ldc_I8, method.Address);
+						mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
+						mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
+						mbil.Emit(OpCodes.Ret);
+					}
+					Helpers.VerifyElseThrow(nextLabel.HasValue, "Internal error: Missing label");
+					mbil.MarkLabel(nextLabel.Value);
+					mbil.Emit(OpCodes.Ldnull);
 					mbil.Emit(OpCodes.Ret);
-					
-					PropertyBuilder pb = tb.DefineProperty($"method_{methodName}", PropertyAttributes.None, typeof(NativeMethodInfo), null);
-					pb.SetGetMethod(mb);
 				}
 				else
 				{
-					MethodBuilder mb = tb.DefineMethod($"get_method_{methodGroup.Key}",
-						MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
-						typeof(NativeMethodInfo), Type.EmptyTypes);
-					ILGenerator mbil = mb.GetILGenerator();
 					mbil.Emit(OpCodes.Ldc_I8, methods[0].Address);
 					mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
 					mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
 					mbil.Emit(OpCodes.Ret);
-
-					PropertyBuilder pb = tb.DefineProperty($"method_{methodName}", PropertyAttributes.None, typeof(NativeMethodInfo), null);
-					pb.SetGetMethod(mb);
 				}
-			}
 
-			internalIlGenerator?.Emit(OpCodes.Ret);
+				PropertyBuilder pb = tb.DefineProperty($"method_{methodName}", PropertyAttributes.None, typeof(MethodDefinition), null);
+				pb.SetGetMethod(mb);
+			}
 		}
 
 		private void ProcessField(TypeBuilder tb, FieldDescriptor field)
