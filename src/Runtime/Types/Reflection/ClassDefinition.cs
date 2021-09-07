@@ -1,7 +1,7 @@
 ﻿using IL2CS.Core;
 using IL2CS.Runtime.Types.corelib;
 
-namespace IL2CS.Runtime
+namespace IL2CS.Runtime.Types.Reflection
 {
 	[Size(4376)]
 	public class ClassDefinition : StructBase
@@ -12,22 +12,22 @@ namespace IL2CS.Runtime
 
 		[Offset(16)]
 #pragma warning disable 649
-		private Native__LPSTR _Name;
+		private Native__LPSTR m_name;
 #pragma warning restore 649
-		public string Name { get { Load(); return _Name.Value; } }
+		public string Name { get { Load(); return m_name.Value; } }
 
 
 		[Offset(24)]
 #pragma warning disable 649
-		private Native__LPSTR _Namespace;
+		private Native__LPSTR m_namespace;
 #pragma warning restore 649
-		public string Namespace { get { Load(); return _Namespace.Value; } }
+		public string Namespace { get { Load(); return m_namespace.Value; } }
 
 		[Offset(184)]
 		[Indirection(2)]
 #pragma warning disable 649
-		private UnknownClass _StaticFields;
+		private UnknownClass m_staticFields;
 #pragma warning restore 649
-		public UnknownClass StaticFields { get { Load(); return _StaticFields; } }
+		public UnknownClass StaticFields { get { Load(); return m_staticFields; } }
 	}
 }

@@ -3,6 +3,7 @@ using ProcessMemoryUtilities.Managed;
 using ProcessMemoryUtilities.Native;
 using System;
 using System.Reflection;
+using IL2CS.Runtime.Types.Reflection;
 
 namespace IL2CS.Runtime
 {
@@ -14,7 +15,8 @@ namespace IL2CS.Runtime
 		public Il2CsRuntimeContext Context { get; set; }
 		public long Address { get; set; }
 
-		public ClassDefinition klass
+		// ReSharper disable once UnusedMember.Global
+		public ClassDefinition ClassDefinition
 		{
 			get
 			{

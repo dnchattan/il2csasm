@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -9,13 +10,28 @@ using IL2CS.Core;
 using IL2CS.Generator.TypeManagement;
 using IL2CS.Runtime;
 using IL2CS.Runtime.Types;
+using IL2CS.Runtime.Types.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace IL2CS.Generator
 {
 	public class AssemblyGenerator
 	{
-		private static readonly MethodInfo StructBase_LoadMethod = typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance);
+		private static readonly Type MethodDictionaryType = typeof(Dictionary<Type, MethodDefinition>);
+		private static readonly MethodInfo MethodDefinition_LookupMethod =
+			typeof(MethodDefinition).GetMethod("Lookup", BindingFlags.Static | BindingFlags.Public);
+		private static readonly ConstructorInfo MethodDictionary_Ctor = MethodDictionaryType.GetConstructor(Type.EmptyTypes);
+		private static readonly MethodInfo MethodDictionary_AddMethod = MethodDictionaryType.GetMethod("Add");
+		private static readonly Type[] MethodDefinition_Ctor_Args = { typeof(long), typeof(string) };
+		private static readonly ConstructorInfo MethodDefinition_Ctor = typeof(MethodDefinition).GetConstructor(
+			BindingFlags.Public | BindingFlags.Instance,
+			null,
+			MethodDefinition_Ctor_Args,
+			null);
+		private static readonly MethodInfo Type_GetTypeFromHandleMethod = typeof(Type).GetMethod("GetTypeFromHandle");
+
+		private static readonly MethodInfo StructBase_LoadMethod =
+			typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance);
 		private static readonly Type[] StructBase_Constructor_Params = { typeof(Il2CsRuntimeContext), typeof(long) };
 		private static readonly ConstructorInfo StructBase_Constructor = typeof(StructBase).GetConstructor(
 			BindingFlags.NonPublic | BindingFlags.Instance, 
@@ -125,37 +141,139 @@ namespace IL2CS.Generator
 			{
 				if (type is TypeBuilder tb)
 				{
-					if (td.Base != null)
-					{
-						tb.SetParent(ResolveTypeReference(td.Base));
-					}
+					if (td.TypeDef.IsEnum)
+						continue;
 
-					if (!td.TypeDef.IsEnum)
-					{
-						foreach (FieldDescriptor field in td.Fields)
-						{
-							if (field.Attributes.HasFlag(FieldAttributes.Static))
-							{
-								// TODO
-								continue;
-							}
-
-							Type fieldType = ResolveTypeReference(field.Type);
-							if (fieldType == null)
-							{
-								m_logger.LogWarning($"Dropping field '{field.Name}' from '{tb.Name}'. Reason: unknown type");
-								continue;
-							}
-
-							ProcessField(tb, field, fieldType);
-						}
-					}
+					ProcessType(td, tb);
 				}
 			}
 		}
 
-		private static void ProcessField(TypeBuilder tb, FieldDescriptor field, Type fieldType)
+		private void ProcessType(TypeDescriptor td, TypeBuilder tb)
 		{
+			if (td.Base != null)
+			{
+				tb.SetParent(ResolveTypeReference(td.Base));
+			}
+
+			foreach (FieldDescriptor field in td.Fields)
+			{
+				ProcessField(tb, field);
+			}
+
+			// methods on value types not yet supported
+			if (!td.TypeDef.IsValueType)
+			{
+				ProcessMethods(tb, td);
+			}
+		}
+
+		private void ProcessMethods(TypeBuilder tb, TypeDescriptor td)
+		{
+			ILGenerator internalIlGenerator = null;
+
+			ILGenerator GetCctorIL()
+			{
+				if (internalIlGenerator != null) return internalIlGenerator;
+
+				ConstructorBuilder cctorBuilder = tb.DefineConstructor(
+					MethodAttributes.Private | MethodAttributes.HideBySig | MethodAttributes.SpecialName |
+					MethodAttributes.RTSpecialName | MethodAttributes.Static, CallingConventions.Standard,
+					Type.EmptyTypes);
+				internalIlGenerator = cctorBuilder.GetILGenerator();
+				
+				return internalIlGenerator;
+			}
+			
+			IEnumerable<IGrouping<string, MethodDescriptor>> methodGroups = td.Methods.GroupBy(method => method.Name);
+			foreach (IGrouping<string, MethodDescriptor> methodGroup in methodGroups)
+			{
+				string methodName = methodGroup.Key;
+				// only none or single-argument generic type methods are supported right one
+				MethodDescriptor[] methods = methodGroup.Where(method => method.DeclaringTypeArgs.Count <= 1).ToArray();
+				if (methods.Length == 0)
+					continue;
+
+				if (methods.Length > 1)
+				{
+					if (((TypeInfo)((Type)tb)).GenericTypeParameters.Length == 0)
+					{
+						continue;
+					}
+
+					FieldBuilder staticFieldBuilder = tb.DefineField($"_method_{methodName}", MethodDictionaryType,
+						FieldAttributes.Private|FieldAttributes.Static| FieldAttributes.InitOnly);
+
+					ILGenerator staticTableIL = GetCctorIL();
+
+					staticTableIL.Emit(OpCodes.Newobj, MethodDictionary_Ctor);
+					
+					foreach (MethodDescriptor method in methods)
+					{
+						if (method.DeclaringTypeArgs.Count == 0)
+							continue;
+						Type declaringTypeArg0 = ResolveTypeReference(method.DeclaringTypeArgs[0]);
+						// cannot generate types for generic arguments. feel free to implement if you're brave.
+						if (declaringTypeArg0 == null || declaringTypeArg0.IsGenericType)
+							continue;
+
+						staticTableIL.Emit(OpCodes.Dup);
+						staticTableIL.Emit(OpCodes.Ldtoken, declaringTypeArg0);
+						staticTableIL.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
+						staticTableIL.Emit(OpCodes.Ldc_I8, method.Address);
+						staticTableIL.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
+						staticTableIL.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
+						staticTableIL.EmitCall(OpCodes.Callvirt, MethodDictionary_AddMethod, null);
+					}
+					staticTableIL.Emit(OpCodes.Stsfld, staticFieldBuilder);
+
+					MethodBuilder mb = tb.DefineMethod($"get_method_{methodGroup.Key}",
+						MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
+						typeof(NativeMethodInfo), Type.EmptyTypes);
+					ILGenerator mbil = mb.GetILGenerator();
+					mbil.Emit(OpCodes.Ldtoken, ((TypeInfo)(Type)tb).GenericTypeParameters[0]);
+					mbil.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
+					mbil.Emit(OpCodes.Ldsfld, staticFieldBuilder);
+					mbil.EmitCall(OpCodes.Call, MethodDefinition_LookupMethod, null);
+					mbil.Emit(OpCodes.Ret);
+					
+					PropertyBuilder pb = tb.DefineProperty($"method_{methodName}", PropertyAttributes.None, typeof(NativeMethodInfo), null);
+					pb.SetGetMethod(mb);
+				}
+				else
+				{
+					MethodBuilder mb = tb.DefineMethod($"get_method_{methodGroup.Key}",
+						MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.SpecialName | MethodAttributes.HideBySig,
+						typeof(NativeMethodInfo), Type.EmptyTypes);
+					ILGenerator mbil = mb.GetILGenerator();
+					mbil.Emit(OpCodes.Ldc_I8, methods[0].Address);
+					mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
+					mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
+					mbil.Emit(OpCodes.Ret);
+
+					PropertyBuilder pb = tb.DefineProperty($"method_{methodName}", PropertyAttributes.None, typeof(NativeMethodInfo), null);
+					pb.SetGetMethod(mb);
+				}
+			}
+
+			internalIlGenerator?.Emit(OpCodes.Ret);
+		}
+
+		private void ProcessField(TypeBuilder tb, FieldDescriptor field)
+		{
+			if (field.Attributes.HasFlag(FieldAttributes.Static))
+			{
+				// TODO
+				return;
+			}
+
+			Type fieldType = ResolveTypeReference(field.Type);
+			if (fieldType == null)
+			{
+				m_logger.LogWarning($"Dropping field '{field.Name}' from '{tb.Name}'. Reason: unknown type");
+				return;
+			}
+
 			bool generateFieldsOnly = tb.IsValueType;
 			byte indirection = 1;
 			while (fieldType.IsPointer)
@@ -187,7 +305,7 @@ namespace IL2CS.Generator
 				fb.SetConstant(field.DefaultValue);
 			}
 
-			MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public, fieldType, Type.EmptyTypes);
+			MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.RTSpecialName | MethodAttributes.SpecialName, fieldType, Type.EmptyTypes);
 			ILGenerator mbil = mb.GetILGenerator();
 			mbil.Emit(OpCodes.Ldarg_0);
 			mbil.Emit(OpCodes.Call, StructBase_LoadMethod);
@@ -285,7 +403,8 @@ namespace IL2CS.Generator
 		{
 			if (m_state != State.GenerateTypes)
 			{
-				throw new ApplicationException("Invalid state");
+				return null;
+				// throw new ApplicationException("Invalid state");
 			}
 
 			Type type = CreateAndRegisterType(descriptor);
@@ -511,10 +630,16 @@ namespace IL2CS.Generator
 				}
 
 				// methods
+				UniqueName uniqueMethodName = new();
 				foreach (int methodIndex in Enumerable.Range(td.TypeDef.methodStart, td.TypeDef.method_count))
 				{
 					Il2CppMethodDefinition methodDef = m_context.Metadata.methodDefs[methodIndex];
-					string methodName = m_context.Metadata.GetStringFromIndex(methodDef.nameIndex);
+					string methodName = uniqueMethodName.Get(m_context.Metadata.GetStringFromIndex(methodDef.nameIndex));
+					// only static, non-ctor methods
+					if (methodName.StartsWith(".") || !((MethodAttributes)methodDef.flags).HasFlag(MethodAttributes.Static))
+					{
+						continue;
+					}
 
 					// generic instance method arguments
 					if (m_context.Il2Cpp.methodDefinitionMethodSpecs.TryGetValue(methodIndex, out var methodSpecs))
@@ -526,22 +651,26 @@ namespace IL2CS.Generator
 								var classInst = m_context.Il2Cpp.genericInsts[methodSpec.classIndexIndex];
 								var pointers = m_context.Il2Cpp.MapVATR<ulong>(classInst.type_argv, classInst.type_argc);
 
-								MethodDescriptor md = new(methodName);
+								ulong genericMethodPointer = m_context.Il2Cpp.methodSpecGenericMethodPointers[methodSpec];
+								ulong address = m_context.Il2Cpp.GetRVA(genericMethodPointer);
+								MethodDescriptor md = new(methodName, (long)address);
 								for (int i = 0; i < classInst.type_argc; i++)
 								{
 									var il2CppType = m_context.Il2Cpp.GetIl2CppType(pointers[i]);
 									string typeName = m_context.Executor.GetTypeName(il2CppType, true, false);
 									md.DeclaringTypeArgs.Add(new TypeReference(typeName, il2CppType, td));
 								}
+
 								td.Methods.Add(md);
 							}
 						}
 					}
-					else
-					{
-						MethodDescriptor md = new(methodName);
-						td.Methods.Add(md);
-					}
+					// TODO: Get address
+					//else
+					//{
+					//	MethodDescriptor md = new(methodName, 0);
+					//	td.Methods.Add(md);
+					//}
 				}
 			}
 		}

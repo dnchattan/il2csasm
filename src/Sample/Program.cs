@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using IL2CS.Core;
 using IL2CS.Runtime;
+using IL2CS.Runtime.Types.Reflection;
 
 namespace examples
 {
@@ -12,7 +13,8 @@ namespace examples
 		{
 			Process raidProc = GetRaidProcess();
 			Il2CsRuntimeContext runtime = new(raidProc);
-			AppModelStaticFields statics = runtime.ReadStruct<AppModelStatics>().GetInstance.klass.StaticFields.As<AppModelStaticFields>();
+			var statics = Client.App.SingleInstance<Client.Model.AppModel>.method_get_Instance.DeclaringClass.StaticFields
+				.As<AppModelStaticFields>();
 			Client.Model.AppModel appModel = statics.Instance;
 			Console.WriteLine(appModel.UserId); // avoid compile error by dumping this out
 		}
@@ -57,9 +59,9 @@ namespace examples
 
 		[Address(58725120, "GameAssembly.dll")]
 		[Indirection(2)]
-		private MethodDefinition _GetInstance;
+		private NativeMethodInfo _GetInstance;
 
-		public MethodDefinition GetInstance
+		public NativeMethodInfo GetInstance
 		{
 			get
 			{

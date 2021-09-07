@@ -1,22 +1,32 @@
-﻿using IL2CS.Core;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Tasks;
 
-namespace IL2CS.Runtime
+namespace IL2CS.Runtime.Types.Reflection
 {
-	[Size(80)]
-	public class MethodDefinition : StructBase
+	public class MethodDefinition
 	{
-		public MethodDefinition(Il2CsRuntimeContext context, long address) : base(context, address)
+		private readonly long m_address;
+		private readonly string m_moduleName;
+		public MethodDefinition(long address, string moduleName)
 		{
+			m_address = address;
+			m_moduleName = moduleName;
 		}
 
-		[Offset(24)]
-		[Indirection(2)]
-#pragma warning disable 649
-		private ClassDefinition _klass;
-#pragma warning restore 649
+		// ReSharper disable once UnusedMember.Global
+		public static MethodDefinition Lookup(Type type, Dictionary<Type, MethodDefinition> table)
+		{
+			return table.TryGetValue(type, out MethodDefinition method) ? method : null;
+		}
 
-		// ReSharper disable once InconsistentNaming
-		public ClassDefinition klass { get { Load(); return _klass; } }
-
+		public NativeMethodInfo Get(Il2CsRuntimeContext context)
+		{
+			long address = m_address + context.GetModuleAddress(m_moduleName);
+			return context.ReadValue<NativeMethodInfo>(address, 2);
+		}
 	}
 }
