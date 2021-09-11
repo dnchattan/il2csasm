@@ -39,9 +39,10 @@ namespace IL2CS.Runtime
 			Address = address;
 		}
 
-		public T As<T>() where T : StructBase
+		public T As<T>()
 		{
-			T cast = Context.ReadValue(typeof(T), Address, 1) as T;
+			// avoid double-indirection used to get to this type by passing indirection=0
+			T cast = (T)Context.ReadValue(typeof(T), Address, 0);
 			return cast;
 		}
 

@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\248\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\248\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel -o $(ProjectDir)Raid.dll" />
+    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\249\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\249\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel -o $(ProjectDir)Raid.dll" />
   </Target>
 
 </Project>

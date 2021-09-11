@@ -47,7 +47,7 @@ namespace IL2CS.Core
 		}
 	}
 
-	[AttributeUsage(AttributeTargets.Class, Inherited = true, AllowMultiple = false)]
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = true, AllowMultiple = false)]
 	public class SizeAttribute : Attribute
 	{
 		public uint Size { get; private set; }

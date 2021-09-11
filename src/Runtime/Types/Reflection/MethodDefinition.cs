@@ -17,10 +17,10 @@ namespace IL2CS.Runtime.Types.Reflection
 			m_moduleName = moduleName;
 		}
 		
-		public NativeMethodInfo Get(Il2CsRuntimeContext context)
+		public NativeMethodInfo GetMethodInfo(Il2CsRuntimeContext context)
 		{
 			ulong address = m_address + context.GetModuleAddress(m_moduleName);
-			return context.ReadValue<NativeMethodInfo>(address, 2);
+			return context.ReadValue<NativeMethodInfo>(address, 1);
 		}
 	}
 }

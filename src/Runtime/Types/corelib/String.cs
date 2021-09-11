@@ -14,10 +14,11 @@ namespace IL2CS.Runtime.Types.corelib
 		// ReSharper disable once UnusedMember.Local
 		private void ReadFields(Il2CsRuntimeContext context, ulong address)
 		{
-			int strlen = context.ReadValue<int>(address + 16, 1);
-			if (strlen == 0)
+			int strlen = context.ReadValue<int>(address + 16);
+			if (strlen <= 0)
 			{
 				Value = string.Empty;
+				DebugHelpers.Assert(strlen == 0, "Invalid string length");
 				return;
 			}
 

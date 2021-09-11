@@ -17,6 +17,15 @@ namespace IL2CS.Generator
 {
 	public class AssemblyGenerator
 	{
+		private static readonly Type[] StaticPropertyDefinition_Ctor_Args = { typeof(ulong), typeof(ulong), typeof(byte), typeof(string) };
+		private static ConstructorInfo GetStaticPropertyDefinition_Ctor(Type type) {
+			return typeof(StaticPropertyDefinition<>).MakeGenericType(type).GetConstructor(
+				BindingFlags.Public | BindingFlags.Instance,
+				null,
+				StaticPropertyDefinition_Ctor_Args,
+				null);
+		}
+
 		private static readonly Type[] MethodDefinition_Ctor_Args = { typeof(ulong), typeof(string) };
 		private static readonly ConstructorInfo MethodDefinition_Ctor = typeof(MethodDefinition).GetConstructor(
 			BindingFlags.Public | BindingFlags.Instance,
@@ -388,6 +397,11 @@ namespace IL2CS.Generator
 			Type type = CreateAndRegisterType(descriptor);
 			Helpers.VerifyElseThrow(m_generatedTypes.ContainsKey(descriptor), "type was not added to m_generatedTypes");
 
+			if (type == null)
+			{
+				return null;
+			}
+
 			if (type is TypeBuilder tb)
 			{
 				// enum
@@ -449,7 +463,8 @@ namespace IL2CS.Generator
 
 				if (type is not TypeBuilder parentBuilder)
 				{
-					throw new ApplicationException("Internal error: Parent is not of type TypeBuilder");
+					return RegisterType(descriptor, null);
+					// throw new ApplicationException("Internal error: Parent is not of type TypeBuilder");
 				}
 				return RegisterType(
 					descriptor, 
@@ -635,7 +650,7 @@ namespace IL2CS.Generator
 					}
 
 					// generic instance method arguments
-					if (m_context.Il2Cpp.methodDefinitionMethodSpecs.TryGetValue(methodIndex, out var methodSpecs)) 
+					if (m_context.Il2Cpp.methodDefinitionMethodSpecs.TryGetValue(methodIndex, out List<Il2CppMethodSpec> methodSpecs)) 
 					{
 						foreach (Il2CppMethodSpec methodSpec in methodSpecs)
 						{
