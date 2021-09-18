@@ -11,14 +11,14 @@
     <ProjectReference Include="..\Runtime\Runtime.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="Raid">
-      <HintPath>Raid.dll</HintPath>
-    </Reference>
-  </ItemGroup>
+	<ItemGroup>
+		<Reference Include="Raid">
+			<HintPath>Raid.dll</HintPath>
+		</Reference>
+	</ItemGroup>
 
-  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\249\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\249\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel -o $(ProjectDir)Raid.dll" />
+	<Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel -o $(ProjectDir)Raid.dll" />
   </Target>
 
 </Project>

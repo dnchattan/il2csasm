@@ -7,12 +7,16 @@ using Client.Model.Gameplay.Heroes.Data;
 using Client.Model.Guard;
 using IL2CS.Core;
 using IL2CS.Runtime;
-using IL2CS.Runtime.Types.corelib.Collections;
-using IL2CS.Runtime.Types.Reflection;
 using SharedModel.Meta.Heroes;
+using SharedModel.Meta.Heroes.Dtos;
 
 namespace examples
 {
+	enum A
+	{
+		A,
+		B
+	}
 	internal class Sample
 	{
 		private static void Main(string[] args)
@@ -26,11 +30,19 @@ namespace examples
 		
 			UserWrapper userWrapper = appModel._userWrapper;
 			HeroesWrapper heroes = userWrapper.Heroes;
+			foreach (SetHeroMarkerDto marker in heroes._markers)
+			{
+				Enum.GetName(marker.Marker);
+			}
 			UpdatableHeroData heroData = heroes.HeroData;
 			IReadOnlyDictionary<int, Hero> heroById = heroData.HeroById;
 			foreach ((int key, Hero value) in heroById)
 			{
-				Console.WriteLine($"{key}: {value._type.Name.DefaultValue}");
+				Console.WriteLine($"{key}: {value._type?.Name.DefaultValue ?? "??"}");
+				foreach (var skill in value.Skills)
+				{
+					Console.WriteLine($"\tSkill {skill.Id}: {skill.TypeId}");
+				}
 			}
 		}
 		private static Process GetRaidProcess()

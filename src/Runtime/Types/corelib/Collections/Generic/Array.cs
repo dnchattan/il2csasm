@@ -2,7 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 
-namespace IL2CS.Runtime.Types.corelib.Collections
+namespace IL2CS.Runtime.Types.corelib.Collections.Generic
 {
 	/**
 	 * Array structure:

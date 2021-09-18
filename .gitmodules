@@ -1,3 +1,6 @@
 [submodule "Il2CppDumper"]
 	path = Il2CppDumper
 	url = https://github.com/Perfare/Il2CppDumper.git
+[submodule "ILPack/ILPack"]
+	path = ILPack/ILPack
+	url = https://github.com/Lokad/ILPack.git

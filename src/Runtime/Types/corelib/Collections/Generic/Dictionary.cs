@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using IL2CS.Core;
 
-namespace IL2CS.Runtime.Types.corelib.Collections
+namespace IL2CS.Runtime.Types.corelib.Collections.Generic
 {
 	[TypeMapping(typeof(Dictionary<,>))]
+	// ReSharper disable once InconsistentNaming
+	// ReSharper disable once UnusedMember.Global
 	public class Native__Dictionary<TKey, TValue> : StructBase, IReadOnlyDictionary<TKey, TValue>
 	{
 		public Native__Dictionary(Il2CsRuntimeContext context, ulong address)
@@ -25,6 +24,7 @@ namespace IL2CS.Runtime.Types.corelib.Collections
 			public UInt32 Next;
 			[Offset(0x08)]
 			public TKey Key;
+			// TODO: Offset should shift based on sizeof(TKey) [ requires size information from IL2CppDumper, which is not currently public :( ]
 			[Offset(0x10)]
 			public TValue Value;
 		}
