@@ -16,7 +16,7 @@ namespace IL2CS.Runtime
 		public ulong Address { get; set; }
 
 		// ReSharper disable once UnusedMember.Global
-		public ClassDefinition ClassDefinition
+		public virtual ClassDefinition ClassDefinition
 		{
 			get
 			{

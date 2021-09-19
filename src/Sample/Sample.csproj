@@ -6,9 +6,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Generator.Cli\Generator.Cli.csproj" />
     <ProjectReference Include="..\Runtime\Runtime.csproj" />
+    <ProjectReference Include="..\Sample.Prebuild\Sample.Prebuild.csproj" />
   </ItemGroup>
 
 	<ItemGroup>
@@ -16,9 +16,5 @@
 			<HintPath>Raid.dll</HintPath>
 		</Reference>
 	</ItemGroup>
-
-	<Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel -o $(ProjectDir)Raid.dll" />
-  </Target>
 
 </Project>

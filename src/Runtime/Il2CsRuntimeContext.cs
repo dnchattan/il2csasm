@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using IL2CS.Runtime.Types;
 using IL2CS.Runtime.Types.corelib;
 using static IL2CS.Runtime.Types.Types;
 
@@ -13,10 +14,25 @@ namespace IL2CS.Runtime
 {
 	public class Il2CsRuntimeContext
 	{
+		public class ObjectEventArgs : EventArgs
+		{
+			public ulong Address { get; }
+			public object Value { get; }
+
+			public ObjectEventArgs(object obj, ulong address) : base()
+			{
+				Value = obj;
+				Address = address;
+			}
+
+		}
 		private readonly Dictionary<string, ulong> moduleAddresses = new();
 		private readonly ReadProcessMemoryCache rpmCache = new();
 		private readonly IntPtr processHandle;
 		public Process TargetProcess { get; }
+		public event EventHandler<ObjectEventArgs> ObjectCreated;
+		public event EventHandler<ObjectEventArgs> ObjectLoaded;
+
 		public Il2CsRuntimeContext(Process target)
 		{
 			TargetProcess = target;
@@ -75,6 +91,7 @@ namespace IL2CS.Runtime
 
 				type = type.BaseType;
 			} while (type != null && type != typeof(StructBase) && type != typeof(object) && type != typeof(ValueType));
+			ObjectLoaded?.Invoke(this, new ObjectEventArgs(target, targetAddress));
 		}
 
 		public void ReadField(object target, ulong targetAddress, FieldInfo field)
@@ -143,17 +160,31 @@ namespace IL2CS.Runtime
 			}
 			if (type.IsInterface)
 			{
-				// TODO
-				return null;
+				UnknownClass unk = (UnknownClass)ReadStruct(typeof(UnknownClass), address);
+				
+				if (unk?.ClassDefinition == null)
+					return null;
+
+				type = LoadedTypes.GetType(unk.ClassDefinition);
+				
+				if (type == null)
+					return null;
+				if (type.IsGenericType)
+				{
+					Debugger.Break();
+				}
 			}
 			if (type.IsAssignableTo(typeof(StructBase)))
 			{
-				return Activator.CreateInstance(type, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, address }, null);
+				object classObject = Activator.CreateInstance(type, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, new object[] { this, address }, null);
+				ObjectCreated?.Invoke(this, new ObjectEventArgs(classObject, address));
+				return classObject;
 			}
 			// value type
-			object result = Activator.CreateInstance(type);
-			ReadFields(type, result, address);
-			return result;
+			object valueObject = Activator.CreateInstance(type);
+			ObjectCreated?.Invoke(this, new ObjectEventArgs(valueObject, address));
+			ReadFields(type, valueObject, address);
+			return valueObject;
 		}
 
 		public static ulong GetTypeSize(Type type)

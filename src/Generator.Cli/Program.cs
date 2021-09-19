@@ -43,10 +43,10 @@ namespace IL2CS.Generator.Cli
 						MetadataPath = o.MetadataPath, // @"C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\247\Raid_Data\il2cpp_data\Metadata\global-metadata.dat",
 						TypeSelectors = new System.Func<TypeManagement.TypeDescriptor, bool>[]
 						{
-							//td => o.IncludeTypes == null || o.IncludeTypes.Contains(td.Name),
+							td => o.IncludeTypes == null || o.IncludeTypes.Contains(td.Name),
 							//td => td.Name.StartsWith("System.Collections")
 							//td => td.Name == "Plarium.GS.Model.Modules.GlobalRatings.Entities.GlobalRatingStatusIds"
-							td => td.Name == "Client.Model.AppModel"
+							// td => td.Name == "Client.Model.AppModel"
 							//td => td.Name == "Client.App.Configuration.BuildConfiguration",
 							//td => td.Name == "Client.Model.Settings.ConfigManager"
 						}

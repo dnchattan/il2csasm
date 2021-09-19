@@ -15,6 +15,13 @@ namespace IL2CS.Generator.TypeManagement
 			Type = type;
 		}
 
+		public TypeReference(Type genericType, params TypeReference[] typeArguments)
+		{
+			Name = genericType.FullName;
+			GenericType = genericType;
+			TypeArguments = typeArguments;
+		}
+
 		public TypeReference(string typeName, Il2CppType cppType, TypeDescriptor typeContext)
 		{
 			Name = typeName;
@@ -22,8 +29,20 @@ namespace IL2CS.Generator.TypeManagement
 			TypeContext = typeContext;
 		}
 
+		public TypeReference(TypeDescriptor typeDescriptor)
+		{
+			Name = typeDescriptor.FullName;
+			TypeDescriptor = typeDescriptor;
+		}
+
 		public readonly string Name;
 		public readonly Type Type;
+
+		public readonly TypeDescriptor TypeDescriptor;
+
+		public readonly Type GenericType;
+		public readonly TypeReference[] TypeArguments;
+		
 		public readonly Il2CppType CppType;
 		public readonly TypeDescriptor TypeContext;
 	}

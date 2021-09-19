@@ -2,7 +2,7 @@
   "profiles": {
     "Generator.Cli": {
       "commandName": "Project",
-      "commandLineArgs": "-v -n RaidTest -g C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\250\\GameAssembly.dll -m C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\250\\Raid_Data\\il2cpp_data\\Metadata\\global-metadata.dat -o RaidTest.dll",
+      "commandLineArgs": "-v -n RaidTest -g C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\250\\GameAssembly.dll -m C:\\Users\\PowerSpec\\AppData\\Local\\Plarium\\PlariumPlay\\StandAloneApps\\raid\\250\\Raid_Data\\il2cpp_data\\Metadata\\global-metadata.dat -i Client.Model.AppModel,Client.Model.Gameplay.Artifacts.ExternalArtifactsStorage,SharedModel.Meta.Artifacts.ArtifactStorage.ArtifactStorageResolver -o RaidTest.dll",
       "nativeDebugging": false
     }
   }

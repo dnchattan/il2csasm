@@ -25,7 +25,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\ILPack\ILPack\src\Lokad.ILPack.csproj" />
-    <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Runtime\Runtime.csproj" />
   </ItemGroup>
 

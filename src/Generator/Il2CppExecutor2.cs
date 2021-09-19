@@ -603,7 +603,7 @@ namespace Il2CppDumper
 			return metadata.typeDefs[genericClass.typeDefinitionIndex];
 		}
 
-		public Il2CppTypeDefinition GetTypeDefinitionFromIl2CppType(Il2CppType il2CppType)
+		public Il2CppTypeDefinition GetTypeDefinitionFromIl2CppType(Il2CppType il2CppType, bool resolveGeneric = true)
 		{
 			if (il2Cpp.Version >= 27 && il2Cpp is ElfBase elf && elf.IsDumped)
 			{
@@ -613,7 +613,7 @@ namespace Il2CppDumper
 			}
 			else
 			{
-				if (il2CppType.type == Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST)
+				if (il2CppType.type == Il2CppTypeEnum.IL2CPP_TYPE_GENERICINST && resolveGeneric)
 				{
 					Il2CppGenericClass genericClass = il2Cpp.MapVATR<Il2CppGenericClass>(il2CppType.data.generic_class);
 					return GetGenericClassTypeDefinition(genericClass);

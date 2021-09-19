@@ -17,35 +17,6 @@ namespace IL2CS.Generator
 {
 	public class AssemblyGenerator
 	{
-		private static readonly Type[] StaticPropertyDefinition_Ctor_Args = { typeof(ulong), typeof(ulong), typeof(byte), typeof(string) };
-		private static ConstructorInfo GetStaticPropertyDefinition_Ctor(Type type) {
-			return typeof(StaticPropertyDefinition<>).MakeGenericType(type).GetConstructor(
-				BindingFlags.Public | BindingFlags.Instance,
-				null,
-				StaticPropertyDefinition_Ctor_Args,
-				null);
-		}
-
-		private static readonly Type[] MethodDefinition_Ctor_Args = { typeof(ulong), typeof(string) };
-		private static readonly ConstructorInfo MethodDefinition_Ctor = typeof(MethodDefinition).GetConstructor(
-			BindingFlags.Public | BindingFlags.Instance,
-			null,
-			MethodDefinition_Ctor_Args,
-			null);
-		private static readonly MethodInfo Type_GetTypeFromHandleMethod = typeof(Type).GetMethod("GetTypeFromHandle");
-
-		private static readonly MethodInfo Type_op_Equality =
-			typeof(Type).GetMethod("op_Equality", BindingFlags.Static | BindingFlags.Public);
-
-		private static readonly MethodInfo StructBase_LoadMethod =
-			typeof(StructBase).GetMethod("Load", BindingFlags.NonPublic | BindingFlags.Instance);
-		private static readonly Type[] StructBase_Constructor_Params = { typeof(Il2CsRuntimeContext), typeof(ulong) };
-		private static readonly ConstructorInfo StructBase_Constructor = typeof(StructBase).GetConstructor(
-			BindingFlags.NonPublic | BindingFlags.Instance, 
-			null,
-			StructBase_Constructor_Params,
-			null
-			);
 		private enum State
 		{
 			Initialized = 0,
@@ -216,16 +187,16 @@ namespace IL2CS.Generator
 						nextLabel = mbil.DefineLabel();
 						// if (typeof(T) == typeof(U)) 
 						mbil.Emit(OpCodes.Ldtoken, declaringTypeArg0);
-						mbil.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
+						mbil.EmitCall(OpCodes.Call, StaticReflectionHandles.Type.GetTypeFromHandle, null);
 						mbil.Emit(OpCodes.Ldtoken, typeT0);
-						mbil.EmitCall(OpCodes.Call, Type_GetTypeFromHandleMethod, null);
-						mbil.EmitCall(OpCodes.Call, Type_op_Equality, null);
+						mbil.EmitCall(OpCodes.Call, StaticReflectionHandles.Type.GetTypeFromHandle, null);
+						mbil.EmitCall(OpCodes.Call, StaticReflectionHandles.Type.op_Equality, null);
 						mbil.Emit(OpCodes.Brfalse_S, nextLabel.Value);
 
 						// true -> return new MethodDefinition(address, moduleName)
 						mbil.Emit(OpCodes.Ldc_I8, (long)method.Address);
-						mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
-						mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
+						mbil.Emit(OpCodes.Ldstr, m_moduleName);
+						mbil.Emit(OpCodes.Newobj, StaticReflectionHandles.MethodDefinition.Ctor.ConstructorInfo);
 						mbil.Emit(OpCodes.Ret);
 					}
 					Helpers.VerifyElseThrow(nextLabel.HasValue, "Internal error: Missing label");
@@ -236,8 +207,8 @@ namespace IL2CS.Generator
 				else
 				{
 					mbil.Emit(OpCodes.Ldc_I8, (long)methods[0].Address);
-					mbil.Emit(OpCodes.Ldstr, Path.GetFileName(m_options.GameAssemblyPath));
-					mbil.Emit(OpCodes.Newobj, MethodDefinition_Ctor);
+					mbil.Emit(OpCodes.Ldstr, m_moduleName);
+					mbil.Emit(OpCodes.Newobj, StaticReflectionHandles.MethodDefinition.Ctor.ConstructorInfo);
 					mbil.Emit(OpCodes.Ret);
 				}
 
@@ -295,7 +266,7 @@ namespace IL2CS.Generator
 			MethodBuilder mb = tb.DefineMethod($"get_{field.Name}", MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.RTSpecialName | MethodAttributes.SpecialName, fieldType, Type.EmptyTypes);
 			ILGenerator mbil = mb.GetILGenerator();
 			mbil.Emit(OpCodes.Ldarg_0);
-			mbil.Emit(OpCodes.Call, StructBase_LoadMethod);
+			mbil.Emit(OpCodes.Call, StaticReflectionHandles.StructBase.Load);
 			mbil.Emit(OpCodes.Ldarg_0);
 			mbil.Emit(OpCodes.Ldfld, fb);
 			mbil.Emit(OpCodes.Ret);
@@ -404,6 +375,20 @@ namespace IL2CS.Generator
 
 			if (type is TypeBuilder tb)
 			{
+				tb.SetCustomAttribute(new CustomAttributeBuilder(
+					typeof(TokenAttribute).GetConstructor(new[] { typeof(uint) }), new object[] { descriptor.TypeDef.token }));
+				tb.SetCustomAttribute(new CustomAttributeBuilder(
+					typeof(TagAttribute).GetConstructor(new[] { typeof(ulong) }), new object[] { descriptor.Tag }));
+
+				if (descriptor.IsStatic)
+				{
+					if (m_typeDefToAddress.TryGetValue(descriptor.TypeDef, out ulong address))
+					{
+						tb.SetCustomAttribute(new CustomAttributeBuilder(
+							typeof(AddressAttribute).GetConstructor(new[] { typeof(ulong), typeof(string) }),
+							new object[] { address, m_moduleName }));
+					}
+				}
 				// enum
 				if (descriptor.TypeDef.IsEnum)
 				{
@@ -423,13 +408,15 @@ namespace IL2CS.Generator
 					}
 					else
 					{
-						ConstructorBuilder ctor = tb.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard | CallingConventions.HasThis, StructBase_Constructor_Params);
-						ILGenerator ilCtor = ctor.GetILGenerator();
-						ilCtor.Emit(OpCodes.Ldarg_0);
-						ilCtor.Emit(OpCodes.Ldarg_1);
-						ilCtor.Emit(OpCodes.Ldarg_2);
-						ilCtor.Emit(OpCodes.Call, StructBase_Constructor);
-						ilCtor.Emit(OpCodes.Ret);
+						if (descriptor.IsStatic)
+						{
+							ConstructorInfo ctorInfo = TypeBuilder.GetConstructor(typeof(StaticInstance<>).MakeGenericType(tb), StaticReflectionHandles.StaticInstance.Ctor.ConstructorInfo);
+							CreateConstructor(tb, StaticReflectionHandles.StaticInstance.Ctor.Parameters, ctorInfo);
+						}
+						else
+						{
+							CreateConstructor(tb, StaticReflectionHandles.StructBase.Ctor.Parameters, StaticReflectionHandles.StructBase.Ctor.ConstructorInfo);
+						}
 					}
 				}
 			}
@@ -446,6 +433,18 @@ namespace IL2CS.Generator
 			return type;
 		}
 
+		private static void CreateConstructor(TypeBuilder tb, Type[] ctorArgs, ConstructorInfo ctorInfo)
+		{
+			ConstructorBuilder ctor = tb.DefineConstructor(MethodAttributes.Public,
+				CallingConventions.Standard | CallingConventions.HasThis, ctorArgs);
+			ILGenerator ilCtor = ctor.GetILGenerator();
+			ilCtor.Emit(OpCodes.Ldarg_0);
+			ilCtor.Emit(OpCodes.Ldarg_1);
+			ilCtor.Emit(OpCodes.Ldarg_2);
+			ilCtor.Emit(OpCodes.Call, ctorInfo);
+			ilCtor.Emit(OpCodes.Ret);
+		}
+
 		private Type CreateAndRegisterType(TypeDescriptor descriptor)
 		{
 			if (Types.TryGetType(descriptor.Name, out Type type))
@@ -453,6 +452,7 @@ namespace IL2CS.Generator
 				return RegisterType(descriptor, type);
 			}
 
+			Type baseType = descriptor.Base?.Type;
 			if (descriptor.DeclaringParent != null)
 			{
 				type = EnsureType(descriptor.DeclaringParent);
@@ -463,17 +463,17 @@ namespace IL2CS.Generator
 
 				if (type is not TypeBuilder parentBuilder)
 				{
+					// exclude types declared within a built-in type 
 					return RegisterType(descriptor, null);
-					// throw new ApplicationException("Internal error: Parent is not of type TypeBuilder");
 				}
 				return RegisterType(
 					descriptor, 
-					parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
+					parentBuilder.DefineNestedType(descriptor.Name, descriptor.Attributes, baseType)
 					);
 			}
 			return RegisterType(
 				descriptor,
-				m_module.DefineType(descriptor.Name, descriptor.Attributes, descriptor.Base?.Type)
+				m_module.DefineType(descriptor.Name, descriptor.Attributes, baseType)
 				);
 		}
 
@@ -492,10 +492,6 @@ namespace IL2CS.Generator
 		private Type RegisterType(TypeDescriptor descriptor, Type type)
 		{
 			m_generatedTypes.Add(descriptor, type);
-			//if (type != null && descriptor.Name != type.Name && !type.IsEnum && !type.IsAssignableTo(typeof(StructBase)))
-			//{
-			//	Debugger.Break();
-			//}
 			m_generatedTypeByFullName.Add(descriptor.FullName, type);
 			if (!m_generatedTypeByClassName.ContainsKey(descriptor.Name))
 			{
@@ -503,6 +499,16 @@ namespace IL2CS.Generator
 			}
 			m_generatedTypeByClassName[descriptor.Name].Add(type);
 			return type;
+		}
+
+		private TypeReference GetBaseReferenceTypeFor(TypeDescriptor td)
+		{
+			if (td.IsStatic)
+			{
+				return new TypeReference(typeof(StaticInstance<>), new TypeReference(td));
+			}
+
+			return new TypeReference(typeof(StructBase));
 		}
 
 		private void IndexTypeDescriptors()
@@ -514,25 +520,40 @@ namespace IL2CS.Generator
 			}
 
 			foreach ((uint metadataUsageIndex, uint methodSpecIndex) in m_context.Metadata.metadataUsageDic[
-				Il2CppMetadataUsage.kIl2CppMetadataUsageMethodRef]) //kIl2CppMetadataUsageMethodRef
+				Il2CppMetadataUsage.kIl2CppMetadataUsageMethodRef])
 			{
 				Il2CppMethodSpec methodSpec = m_context.Il2Cpp.methodSpecs[methodSpecIndex];
 				ulong address = m_context.Il2Cpp.GetRVA(m_context.Il2Cpp.metadataUsages[metadataUsageIndex]);
 				methodSpecAddresses.Add(methodSpec, address);
 			}
 
-			foreach ((uint metadataUsageIndex, uint methodDefIndex) in m_context.Metadata.metadataUsageDic[Il2CppMetadataUsage.kIl2CppMetadataUsageMethodDef]) //kIl2CppMetadataUsageMethodDef
+			foreach ((uint metadataUsageIndex, uint methodDefIndex) in m_context.Metadata.metadataUsageDic[Il2CppMetadataUsage.kIl2CppMetadataUsageMethodDef])
 			{
 				Il2CppMethodDefinition methodDef = m_context.Metadata.methodDefs[methodDefIndex];
 				ulong address = m_context.Il2Cpp.GetRVA(m_context.Il2Cpp.metadataUsages[metadataUsageIndex]);
 				methodAddresses.Add(methodDef, address);
 			}
 
-			// Declare all types before associating dependencies
-			for (int typeIndex = 0; typeIndex < m_context.Metadata.typeDefs.Length; ++typeIndex)
+			foreach ((uint metadataUsageIndex, uint typeIndex) in m_context.Metadata.metadataUsageDic[Il2CppMetadataUsage.kIl2CppMetadataUsageTypeInfo])
 			{
-				Il2CppTypeDefinition typeDef = m_context.Metadata.typeDefs[typeIndex];
-				m_typeDescriptors.Add(MakeTypeDescriptor(typeDef, typeIndex));
+				Il2CppType il2CppType = m_context.Il2Cpp.types[typeIndex];
+				Il2CppTypeDefinition typeDef = m_context.Executor.GetTypeDefinitionFromIl2CppType(il2CppType, false);
+				if (typeDef == null) continue;
+
+				ulong address = m_context.Il2Cpp.GetRVA(m_context.Il2Cpp.metadataUsages[metadataUsageIndex]);
+				m_typeDefToAddress.Add(typeDef, address);
+			}
+
+			// Declare all types before associating dependencies
+			for (int imageIndex = 0; imageIndex < m_context.Metadata.imageDefs.Length; ++imageIndex)
+			{
+                Il2CppImageDefinition imageDef = m_context.Metadata.imageDefs[imageIndex];
+                long typeEnd = imageDef.typeStart + imageDef.typeCount;
+                for (int typeDefIndex = imageDef.typeStart; typeDefIndex < typeEnd; typeDefIndex++)
+                {
+					Il2CppTypeDefinition typeDef = m_context.Metadata.typeDefs[typeDefIndex];
+					m_typeDescriptors.Add(MakeTypeDescriptor(typeDef, typeDefIndex, imageDef));
+				}
 			}
 
 			// Build dependencies
@@ -584,7 +605,7 @@ namespace IL2CS.Generator
 					TypeReference baseTypeReference = MakeTypeReferenceFromCppTypeIndex(td.TypeDef.parentIndex, td);
 					if (baseTypeReference.Name == "System.Object")
 					{
-						td.Base = new TypeReference(typeof(StructBase));
+						td.Base = GetBaseReferenceTypeFor(td);
 					}
 					else
 					{
@@ -605,7 +626,7 @@ namespace IL2CS.Generator
 				else
 				{
 					Helpers.Assert(!td.TypeDef.IsValueType, "Unexpected value type");
-					td.Base = new TypeReference(typeof(StructBase));
+					td.Base = GetBaseReferenceTypeFor(td);
 				}
 
 				// interfaces
@@ -689,10 +710,10 @@ namespace IL2CS.Generator
 			return new(baseTypeName, cppType, descriptor);
 		}
 
-		private TypeDescriptor MakeTypeDescriptor(Il2CppTypeDefinition typeDef, int typeIndex)
+		private TypeDescriptor MakeTypeDescriptor(Il2CppTypeDefinition typeDef, int typeIndex, Il2CppImageDefinition imageDef)
 		{
 			string typeName = GetTypeDefName(typeDef);
-			TypeDescriptor td = new(typeName, typeDef, typeIndex);
+			TypeDescriptor td = new(typeName, typeDef, typeIndex, imageDef);
 			m_typeCache.Add(typeIndex, td);
 			return td;
 		}
@@ -723,6 +744,18 @@ namespace IL2CS.Generator
 			if (reference.Type != null)
 			{
 				return reference.Type;
+			}
+
+			if (reference.TypeDescriptor != null)
+			{
+				return m_generatedTypes[reference.TypeDescriptor];
+			}
+
+			if (reference.GenericType != null)
+			{
+				Type[] typeArgs = reference.TypeArguments.Select(ResolveTypeReference).ToArray();
+				Type specializedType = reference.GenericType.MakeGenericType(typeArgs);
+				return specializedType;
 			}
 
 			Il2CppType il2CppType = reference.CppType;
@@ -886,10 +919,13 @@ namespace IL2CS.Generator
 			m_context = new AssemblyGeneratorContext(options);
 			m_asmName = new AssemblyName(options.AssembyName);
 			m_asm = AssemblyBuilder.DefineDynamicAssembly(m_asmName, AssemblyBuilderAccess.RunAndCollect);
+			m_asm.SetCustomAttribute(new CustomAttributeBuilder(typeof(GeneratedAttribute).GetConstructor(Type.EmptyTypes), new object[] { }));
 			m_module = m_asm.DefineDynamicModule(m_asmName.Name);
 			m_logger = options.LogFactory.CreateLogger("generator");
+			m_moduleName = Path.GetFileName(m_options.GameAssemblyPath);
 		}
 
+		private readonly string m_moduleName;
 		private readonly AssemblyGeneratorOptions m_options;
 		private readonly AssemblyName m_asmName;
 		private readonly AssemblyBuilder m_asm;
@@ -897,6 +933,7 @@ namespace IL2CS.Generator
 		private readonly AssemblyGeneratorContext m_context;
 		private readonly Dictionary<Il2CppMethodDefinition, ulong> methodAddresses = new();
 		private readonly Dictionary<Il2CppMethodSpec, ulong> methodSpecAddresses = new();
+		private readonly Dictionary<Il2CppTypeDefinition, ulong> m_typeDefToAddress = new();
 		private readonly Dictionary<int, TypeDescriptor> m_typeCache = new();
 		private readonly List<TypeDescriptor> m_typeDescriptors = new();
 		private readonly Dictionary<TypeDescriptor, Type> m_generatedTypes = new();

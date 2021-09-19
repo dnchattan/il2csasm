@@ -61,8 +61,8 @@ namespace IL2CS.Generator
 		public static TypeAttributes GetTypeAttributes(Il2CppTypeDefinition typeDef)
 		{
 			//return (TypeAttributes)typeDef.flags;
-			TypeAttributes attrs = default(TypeAttributes);
-			var visibility = typeDef.flags & TYPE_ATTRIBUTE_VISIBILITY_MASK;
+			TypeAttributes attrs = default;
+			uint visibility = typeDef.flags & TYPE_ATTRIBUTE_VISIBILITY_MASK;
 			switch (visibility)
 			{
 				case TYPE_ATTRIBUTE_PUBLIC:
@@ -91,7 +91,7 @@ namespace IL2CS.Generator
 					break;
 			}
 			if ((typeDef.flags & TYPE_ATTRIBUTE_ABSTRACT) != 0 && (typeDef.flags & TYPE_ATTRIBUTE_SEALED) != 0)
-				attrs |= TypeAttributes.NotPublic;
+			{} //	attrs |= TypeAttributes.Abstract | TypeAttributes.Sealed;
 			else if ((typeDef.flags & TYPE_ATTRIBUTE_INTERFACE) == 0 && (typeDef.flags & TYPE_ATTRIBUTE_ABSTRACT) != 0)
 				attrs |= TypeAttributes.Abstract;
 			else if ((typeDef.flags & TYPE_ATTRIBUTE_SEALED) != 0)
