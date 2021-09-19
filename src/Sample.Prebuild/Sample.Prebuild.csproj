@@ -1,11 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel,Client.Model.Gameplay.Artifacts.ExternalArtifactsStorage,SharedModel.Meta.Artifacts.ArtifactStorage.ArtifactStorageResolver -o $(ProjectDir)..\Sample\Raid.dll" />
+    <Exec Command="$(SolutionDir)src\Generator.Cli\$(OutDir)\IL2CS.Generator.Cli.exe -n Raid -g C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\GameAssembly.dll -m C:\Users\PowerSpec\AppData\Local\Plarium\PlariumPlay\StandAloneApps\raid\250\Raid_Data\il2cpp_data\Metadata\global-metadata.dat -i Client.Model.AppModel,Client.Model.Gameplay.Artifacts.ExternalArtifactsStorage,Client.Model.Gameplay.StaticData.ClientStaticDataManager,SharedModel.Meta.Artifacts.ArtifactStorage.ArtifactStorageResolver -o $(ProjectDir)..\Sample\Raid.dll" />
   </Target>
 
   <ItemGroup>

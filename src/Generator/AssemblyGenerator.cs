@@ -134,6 +134,17 @@ namespace IL2CS.Generator
 				tb.SetParent(ResolveTypeReference(td.Base));
 			}
 
+			foreach (TypeReference implements in td.Implements)
+			{
+				Type interfaceType = ResolveTypeReference(implements);
+				if (interfaceType == null)
+				{
+					m_logger.LogWarning($"Dropping interface '{implements.Name}' from '{td.FullName}': interface is not supported or not emitted.");
+					continue;
+				}
+				tb.AddInterfaceImplementation(interfaceType);
+			}
+
 			foreach (FieldDescriptor field in td.Fields)
 			{
 				ProcessField(tb, field);

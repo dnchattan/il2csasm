@@ -29,7 +29,7 @@ namespace examples
 			var statics = Client.App.SingleInstance<Client.Model.AppModel>.method_get_Instance.GetMethodInfo(runtime).DeclaringClass.StaticFields
 				.As<AppModelStaticFields>();
 			Client.Model.AppModel appModel = statics.Instance;
-
+			var sdm = appModel.StaticDataManager;
 
 			var instance = SharedModel.Meta.Artifacts.ArtifactStorage.ArtifactStorageResolver.GetInstance(runtime);
 
